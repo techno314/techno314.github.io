@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wallet N Truckin</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: transparent; color: #f0f0f0; }
+        header { background: rgba(35,39,43,0.85); padding: 1rem; text-align: center; font-size: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+        #dataDisplay { background: rgba(35,39,43,0.7); margin: 1rem; padding: 1rem; border-radius: 12px; min-height: 120px; box-shadow: 0 2px 8px rgba(0,0,0,0.10); display:none; }
+        #controls { margin: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; background: transparent; }
+        .control-group { background: rgba(35,39,43,0.7); padding: 1rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.10); }
+        label { display: block; margin-bottom: 0.5rem; background: transparent; font-weight: 600; letter-spacing: 0.5px; }
+        input, button { margin-bottom: 0.5rem; background: rgba(24,28,32,0.5); color: #f0f0f0; border: 1px solid #444; border-radius: 6px; padding: 0.4rem 0.7rem; font-size: 1rem; transition: border 0.2s, box-shadow 0.2s; }
+        input:focus, button:focus { outline: none; border: 1.5px solid #2d8cf0; box-shadow: 0 0 0 2px rgba(45,140,240,0.15); }
+        button { background: rgba(45,140,240,0.5); color: #fff; border: 1px solid #2d8cf0; padding: 0.5rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: 600; letter-spacing: 0.5px; box-shadow: 0 1px 4px rgba(45,140,240,0.10); }
+        button:hover { background: rgba(26,115,232,0.7); }
+    </style>
+</head>
+<body>
+    </section>
+    <div id="walletOverlay" style="display:none;position:fixed;top:10vh;left:10vw;width:220px;min-height:60px;max-height:30vh;background:rgba(30,30,30,0.92);color:#fff;z-index:9999;overflow:auto;padding:1rem 1.2rem;font-size:1.2rem;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.25);cursor:move;"></div>
+    <script>
+        // --- Wallet N Truckin Overlay Script ---
+        (function() {
+            // Utility: Format wallet and XP values
+            function formatWallet(val) {
+                if (val == null || isNaN(val)) return 'N/A';
+                const abs = Math.abs(val);
+                if (abs >= 1e12) return (val/1e12).toFixed(2) + 't';
+                if (abs >= 1e9) return (val/1e9).toFixed(2) + 'b';
+                if (abs >= 1e6) return (val/1e6).toFixed(2) + 'm';
+                if (abs >= 1e3) return (val/1e3).toFixed(2) + 'k';
+                return val.toLocaleString();
+            }
+            function formatTruckingXP(xp) {
+                if (xp == null || isNaN(xp)) return '0%';
+                const percent = Math.max(0, Math.min(100, (xp / 1_000_000) * 100));
+                return percent.toFixed(2) + '%';
+            }
+            // Overlay update
+            function updateWalletOverlay(wallet, truckingXP, bonusXP) {
+                const overlay = document.getElementById('walletOverlay');
+                try {
+                    if (wallet != null && !isNaN(wallet)) localStorage.setItem('walletOverlay_wallet', wallet);
+                    if (truckingXP != null && !isNaN(truckingXP)) localStorage.setItem('walletOverlay_truckingXp', truckingXP);
+                    if (bonusXP != null && !isNaN(bonusXP)) localStorage.setItem('walletOverlay_bonusXp', bonusXP);
+                } catch (e) {}
+                let html = `<b>Wallet:</b> <span style="font-size:1.3em;color:#7cff7c;">${formatWallet(wallet)}</span>`;
+                html += `<br><b>Trucking XP:</b> <span style="font-size:1.1em;color:#8cf0ff;">${formatTruckingXP(truckingXP)}</span>`;
+                if (truckingXP != null && !isNaN(truckingXP)) {
+                    html += `<br><b>Raw XP:</b> <span style='font-size:1.1em;color:#ffb347;'>${Number(truckingXP).toLocaleString()}</span>`;
+                }
+                if (bonusXP != null && !isNaN(bonusXP)) {
+                    html += `<br><b>Bonus XP Left:</b> <span style='font-size:1.1em;color:#ffd700;'>${Number(bonusXP).toLocaleString()}</span>`;
+                }
+                overlay.innerHTML = html;
+                overlay.style.display = '';
+            }
+            // Overlay drag logic
+            function makeDraggable(overlay) {
+                let isDragging = false, offsetX = 0, offsetY = 0;
+                overlay.addEventListener('mousedown', function(e) {
+                    isDragging = true;
+                    offsetX = e.clientX - overlay.offsetLeft;
+                    offsetY = e.clientY - overlay.offsetTop;
+                    overlay.style.cursor = 'grabbing';
+                });
+                document.addEventListener('mousemove', function(e) {
+                    if (isDragging) {
+                        overlay.style.left = (e.clientX - offsetX) + 'px';
+                        overlay.style.top = (e.clientY - offsetY) + 'px';
+                    }
+                });
+                document.addEventListener('mouseup', function() {
+                    if (isDragging) {
+                        saveOverlayPosition('walletOverlay', overlay.offsetLeft, overlay.offsetTop);
+                    }
+                    isDragging = false;
+                    overlay.style.cursor = 'move';
+                });
+            }
+            // Save/restore overlay position
+            function saveOverlayPosition(id, left, top) {
+                try { localStorage.setItem('overlayPos_' + id, JSON.stringify({ left, top })); } catch (e) {}
+            }
+            function restoreOverlayPosition(id, el, defaultLeft, defaultTop) {
+                try {
+                    const pos = JSON.parse(localStorage.getItem('overlayPos_' + id));
+                    if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') {
+                        el.style.left = pos.left + 'px';
+                        el.style.top = pos.top + 'px';
+                    } else {
+                        el.style.left = defaultLeft;
+                        el.style.top = defaultTop;
+                    }
+                } catch (e) {
+                    el.style.left = defaultLeft;
+                    el.style.top = defaultTop;
+                }
+            }
+            // Data handler
+            function extractOverlayData(event) {
+                let wallet = null, truckingXP = null, bonusXP = null;
+                if (event.data && event.data.type === 'data' && event.data.fromTycoonScript && event.data.data) {
+                    if (typeof event.data.data.wallet !== 'undefined') wallet = event.data.data.wallet;
+                    if (typeof event.data.data.exp_trucking_trucking !== 'undefined') {
+                        truckingXP = event.data.data.exp_trucking_trucking;
+                    } else if (typeof event.data.data.truckingXP !== 'undefined') {
+                        truckingXP = event.data.data.truckingXP;
+                    }
+                    // Inventory: parse if string
+                    let inventoryObj = null;
+                    if (event.data.data.inventory) {
+                        if (typeof event.data.data.inventory === 'string') {
+                            try { inventoryObj = JSON.parse(event.data.data.inventory); } catch (e) { inventoryObj = null; }
+                        } else if (typeof event.data.data.inventory === 'object') {
+                            inventoryObj = event.data.data.inventory;
+                        }
+                    }
+                    if (inventoryObj) {
+                        if ('exp_token_a|trucking|trucking' in inventoryObj) {
+                            const item = inventoryObj['exp_token_a|trucking|trucking'];
+                            if (item && typeof item.amount !== 'undefined') bonusXP = item.amount;
+                        } else {
+                            for (const key in inventoryObj) {
+                                if (/trucking.*(bonus|b)xp/i.test(key)) {
+                                    const item = inventoryObj[key];
+                                    if (item && typeof item.amount !== 'undefined') {
+                                        bonusXP = item.amount;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Fallbacks
+                if (event.data && event.data.data && typeof event.data.data === 'object') {
+                    if (wallet == null && 'wallet' in event.data.data) wallet = event.data.data.wallet;
+                    if (truckingXP == null && 'exp_trucking_trucking' in event.data.data) {
+                        truckingXP = event.data.data.exp_trucking_trucking;
+                    } else if (truckingXP == null && 'truckingXP' in event.data.data) {
+                        truckingXP = event.data.data.truckingXP;
+                    }
+                    let inventoryObj = null;
+                    if (event.data.data.inventory) {
+                        if (typeof event.data.data.inventory === 'string') {
+                            try { inventoryObj = JSON.parse(event.data.data.inventory); } catch (e) { inventoryObj = null; }
+                        } else if (typeof event.data.data.inventory === 'object') {
+                            inventoryObj = event.data.data.inventory;
+                        }
+                    }
+                    if (inventoryObj) {
+                        if ('exp_token_a|trucking|trucking' in inventoryObj) {
+                            const item = inventoryObj['exp_token_a|trucking|trucking'];
+                            if (item && typeof item.amount !== 'undefined') bonusXP = item.amount;
+                        } else {
+                            for (const key in inventoryObj) {
+                                if (/trucking.*(bonus|b)xp/i.test(key)) {
+                                    const item = inventoryObj[key];
+                                    if (item && typeof item.amount !== 'undefined') {
+                                        bonusXP = item.amount;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return { wallet, truckingXP, bonusXP };
+            }
+            // Main overlay logic
+            window.addEventListener('DOMContentLoaded', function() {
+                const overlay = document.getElementById('walletOverlay');
+                restoreOverlayPosition('walletOverlay', overlay, '10vw', '10vh');
+                makeDraggable(overlay);
+                // Restore values from localStorage
+                let wallet = localStorage.getItem('walletOverlay_wallet');
+                let truckingXP = localStorage.getItem('walletOverlay_truckingXp');
+                let bonusXP = localStorage.getItem('walletOverlay_bonusXp');
+                wallet = wallet !== null ? Number(wallet) : null;
+                truckingXP = truckingXP !== null ? Number(truckingXP) : null;
+                bonusXP = bonusXP !== null ? Number(bonusXP) : null;
+                if (wallet != null || truckingXP != null || bonusXP != null) {
+                    overlay.dataset.wallet = wallet != null ? wallet : '';
+                    overlay.dataset.truckingXp = truckingXP != null ? truckingXP : '';
+                    overlay.dataset.bonusXp = bonusXP != null ? bonusXP : '';
+                    updateWalletOverlay(wallet, truckingXP, bonusXP);
+                    document.getElementById('dataDisplay').style.display = 'none';
+                }
+            });
+            // Listen for wallet and XP data in any message
+            window.addEventListener('message', (event) => {
+                // Hide dataDisplay if overlay is shown
+                if (document.getElementById('walletOverlay').style.display !== 'none') {
+                    document.getElementById('dataDisplay').style.display = 'none';
+                }
+                // Extract and update overlay
+                const { wallet, truckingXP, bonusXP } = extractOverlayData(event);
+                if (wallet != null || truckingXP != null || bonusXP != null) {
+                    const overlay = document.getElementById('walletOverlay');
+                    let prevWallet = overlay.dataset.wallet ? Number(overlay.dataset.wallet) : null;
+                    let prevXP = overlay.dataset.truckingXp ? Number(overlay.dataset.truckingXp) : null;
+                    let prevBonus = overlay.dataset.bonusXp ? Number(overlay.dataset.bonusXp) : null;
+                    updateWalletOverlay(
+                        wallet != null ? wallet : prevWallet,
+                        truckingXP != null ? truckingXP : prevXP,
+                        bonusXP != null ? bonusXP : prevBonus
+                    );
+                    overlay.dataset.wallet = wallet != null ? wallet : '';
+                    overlay.dataset.truckingXp = truckingXP != null ? truckingXP : '';
+                    overlay.dataset.bonusXp = bonusXP != null ? bonusXP : '';
+                }
+            });
+            // Escape key: pin the window (give control back to game)
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    window.parent.postMessage({type: 'pin'}, '*');
+                }
+            });
+        })();
+        // --- End Wallet N Truckin Overlay Script ---
+    </script>
+</body>
+</html>
