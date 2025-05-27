@@ -43,12 +43,15 @@
             function updateWalletOverlay(wallet, truckingXP, bonusXP) {
                 const overlay = document.getElementById('walletOverlay');
                 try {
+                    // Only store valid values in localStorage
                     if (wallet != null && !isNaN(wallet)) localStorage.setItem('walletOverlay_wallet', wallet);
                     if (truckingXP != null && !isNaN(truckingXP)) localStorage.setItem('walletOverlay_truckingXp', truckingXP);
                     if (bonusXP != null && !isNaN(bonusXP)) localStorage.setItem('walletOverlay_bonusXp', bonusXP);
                 } catch (e) {}
-                let html = `<b>Wallet:</b> <span style="font-size:1.3em;color:#7cff7c;">${formatWallet(wallet)}</span>`;
-                html += `<br><b>Trucking XP:</b> <span style="font-size:1.1em;color:#8cf0ff;">${formatTruckingXP(truckingXP)}</span>`;
+
+                // Format and update the overlay content
+                let html = `<b>Wallet:</b> <span style="font-size:1.3em;color:#7cff7c;">${wallet != null && !isNaN(wallet) ? formatWallet(wallet) : 'N/A'}</span>`;
+                html += `<br><b>Trucking XP:</b> <span style="font-size:1.1em;color:#8cf0ff;">${truckingXP != null && !isNaN(truckingXP) ? formatTruckingXP(truckingXP) : '0%'}</span>`;
                 if (truckingXP != null && !isNaN(truckingXP)) {
                     html += `<br><b>Raw XP:</b> <span style='font-size:1.1em;color:#ffb347;'>${Number(truckingXP).toLocaleString()}</span>`;
                 }
@@ -107,66 +110,26 @@
             function extractOverlayData(event) {
                 let wallet = null, truckingXP = null, bonusXP = null;
                 if (event.data && event.data.type === 'data' && event.data.fromTycoonScript && event.data.data) {
-                    if (typeof event.data.data.wallet !== 'undefined') wallet = event.data.data.wallet;
-                    if (typeof event.data.data.exp_trucking_trucking !== 'undefined') {
-                        truckingXP = event.data.data.exp_trucking_trucking;
-                    } else if (typeof event.data.data.truckingXP !== 'undefined') {
-                        truckingXP = event.data.data.truckingXP;
-                    }
-                    // Inventory: parse if string
+                    const data = event.data.data;
+                    wallet = data.wallet ?? null;
+                    truckingXP = data.exp_trucking_trucking ?? data.truckingXP ?? null;
+
+                    // Parse inventory for bonus XP
                     let inventoryObj = null;
-                    if (event.data.data.inventory) {
-                        if (typeof event.data.data.inventory === 'string') {
-                            try { inventoryObj = JSON.parse(event.data.data.inventory); } catch (e) { inventoryObj = null; }
-                        } else if (typeof event.data.data.inventory === 'object') {
-                            inventoryObj = event.data.data.inventory;
+                    if (data.inventory) {
+                        if (typeof data.inventory === 'string') {
+                            try { inventoryObj = JSON.parse(data.inventory); } catch (e) { inventoryObj = null; }
+                        } else if (typeof data.inventory === 'object') {
+                            inventoryObj = data.inventory;
                         }
                     }
                     if (inventoryObj) {
-                        if ('exp_token_a|trucking|trucking' in inventoryObj) {
-                            const item = inventoryObj['exp_token_a|trucking|trucking'];
-                            if (item && typeof item.amount !== 'undefined') bonusXP = item.amount;
-                        } else {
-                            for (const key in inventoryObj) {
-                                if (/trucking.*(bonus|b)xp/i.test(key)) {
-                                    const item = inventoryObj[key];
-                                    if (item && typeof item.amount !== 'undefined') {
-                                        bonusXP = item.amount;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // Fallbacks
-                if (event.data && event.data.data && typeof event.data.data === 'object') {
-                    if (wallet == null && 'wallet' in event.data.data) wallet = event.data.data.wallet;
-                    if (truckingXP == null && 'exp_trucking_trucking' in event.data.data) {
-                        truckingXP = event.data.data.exp_trucking_trucking;
-                    } else if (truckingXP == null && 'truckingXP' in event.data.data) {
-                        truckingXP = event.data.data.truckingXP;
-                    }
-                    let inventoryObj = null;
-                    if (event.data.data.inventory) {
-                        if (typeof event.data.data.inventory === 'string') {
-                            try { inventoryObj = JSON.parse(event.data.data.inventory); } catch (e) { inventoryObj = null; }
-                        } else if (typeof event.data.data.inventory === 'object') {
-                            inventoryObj = event.data.data.inventory;
-                        }
-                    }
-                    if (inventoryObj) {
-                        if ('exp_token_a|trucking|trucking' in inventoryObj) {
-                            const item = inventoryObj['exp_token_a|trucking|trucking'];
-                            if (item && typeof item.amount !== 'undefined') bonusXP = item.amount;
-                        } else {
-                            for (const key in inventoryObj) {
-                                if (/trucking.*(bonus|b)xp/i.test(key)) {
-                                    const item = inventoryObj[key];
-                                    if (item && typeof item.amount !== 'undefined') {
-                                        bonusXP = item.amount;
-                                        break;
-                                    }
+                        for (const key in inventoryObj) {
+                            if (/exp_token_a\|trucking\|trucking/i.test(key)) {
+                                const item = inventoryObj[key];
+                                if (item && typeof item.amount === 'number') {
+                                    bonusXP = item.amount;
+                                    break;
                                 }
                             }
                         }
@@ -179,6 +142,7 @@
                 const overlay = document.getElementById('walletOverlay');
                 restoreOverlayPosition('walletOverlay', overlay, '10vw', '10vh');
                 makeDraggable(overlay);
+
                 // Restore values from localStorage
                 let wallet = localStorage.getItem('walletOverlay_wallet');
                 let truckingXP = localStorage.getItem('walletOverlay_truckingXp');
@@ -186,38 +150,42 @@
                 wallet = wallet !== null ? Number(wallet) : null;
                 truckingXP = truckingXP !== null ? Number(truckingXP) : null;
                 bonusXP = bonusXP !== null ? Number(bonusXP) : null;
+
+                // Update dataset attributes for fallback
+                overlay.dataset.wallet = wallet != null ? wallet : '';
+                overlay.dataset.truckingXp = truckingXP != null ? truckingXP : '';
+                overlay.dataset.bonusXp = bonusXP != null ? bonusXP : '';
+
+                // Do not hide the overlay; rely on message events for updates
                 if (wallet != null || truckingXP != null || bonusXP != null) {
-                    overlay.dataset.wallet = wallet != null ? wallet : '';
-                    overlay.dataset.truckingXp = truckingXP != null ? truckingXP : '';
-                    overlay.dataset.bonusXp = bonusXP != null ? bonusXP : '';
                     updateWalletOverlay(wallet, truckingXP, bonusXP);
-                    document.getElementById('dataDisplay').style.display = 'none';
+                    overlay.style.display = '';
                 }
             });
-            // Track last job for overlay visibility
-            let lastJobName = null;
 
-            // Listen for messages from the game
+            // Refine message listener to ensure it updates the overlay correctly
             window.addEventListener('message', (event) => {
-                // Hide dataDisplay if overlay is shown
-                if (document.getElementById('walletOverlay').style.display !== 'none') {
-                    document.getElementById('dataDisplay').style.display = 'none';
-                }
-                // Update overlay with new data
+                const overlay = document.getElementById('walletOverlay');
+
+                // Extract wallet, XP, and bonus XP from incoming data
                 const { wallet, truckingXP, bonusXP } = extractOverlayData(event);
+
+                // Ensure valid data exists before updating the overlay
                 if (wallet != null || truckingXP != null || bonusXP != null) {
-                    const overlay = document.getElementById('walletOverlay');
-                    let prevWallet = overlay.dataset.wallet ? Number(overlay.dataset.wallet) : null;
-                    let prevXP = overlay.dataset.truckingXp ? Number(overlay.dataset.truckingXp) : null;
-                    let prevBonus = overlay.dataset.bonusXp ? Number(overlay.dataset.bonusXp) : null;
-                    updateWalletOverlay(
-                        wallet != null ? wallet : prevWallet,
-                        truckingXP != null ? truckingXP : prevXP,
-                        bonusXP != null ? bonusXP : prevBonus
-                    );
-                    overlay.dataset.wallet = wallet != null ? wallet : '';
-                    overlay.dataset.truckingXp = truckingXP != null ? truckingXP : '';
-                    overlay.dataset.bonusXp = bonusXP != null ? bonusXP : '';
+                    const currentWallet = wallet != null ? wallet : (overlay.dataset.wallet ? Number(overlay.dataset.wallet) : null);
+                    const currentTruckingXP = truckingXP != null ? truckingXP : (overlay.dataset.truckingXp ? Number(overlay.dataset.truckingXp) : null);
+                    const currentBonusXP = bonusXP != null ? bonusXP : (overlay.dataset.bonusXp ? Number(overlay.dataset.bonusXp) : null);
+
+                    // Update the overlay dynamically
+                    updateWalletOverlay(currentWallet, currentTruckingXP, currentBonusXP);
+
+                    // Update dataset attributes for fallback
+                    overlay.dataset.wallet = currentWallet != null ? currentWallet : '';
+                    overlay.dataset.truckingXp = currentTruckingXP != null ? currentTruckingXP : '';
+                    overlay.dataset.bonusXp = currentBonusXP != null ? currentBonusXP : '';
+
+                    // Ensure the overlay is visible
+                    overlay.style.display = '';
                 }
             });
 
