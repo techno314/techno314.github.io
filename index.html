@@ -23,7 +23,7 @@
     <script>
         // --- Wallet N Truckin Overlay Script ---
         (function() {
-            // Utility: Format wallet and XP values
+            // Format wallet and XP values
             function formatWallet(val) {
                 if (val == null || isNaN(val)) return 'N/A';
                 const abs = Math.abs(val);
@@ -38,7 +38,8 @@
                 const percent = Math.max(0, Math.min(100, (xp / 1_000_000) * 100));
                 return percent.toFixed(2) + '%';
             }
-            // Overlay update
+
+            // Update the overlay with wallet, XP, and bonus XP
             function updateWalletOverlay(wallet, truckingXP, bonusXP) {
                 const overlay = document.getElementById('walletOverlay');
                 try {
@@ -57,7 +58,8 @@
                 overlay.innerHTML = html;
                 overlay.style.display = '';
             }
-            // Overlay drag logic
+
+            // Make the overlay draggable
             function makeDraggable(overlay) {
                 let isDragging = false, offsetX = 0, offsetY = 0;
                 overlay.addEventListener('mousedown', function(e) {
@@ -80,7 +82,8 @@
                     overlay.style.cursor = 'move';
                 });
             }
-            // Save/restore overlay position
+
+            // Save and restore overlay position
             function saveOverlayPosition(id, left, top) {
                 try { localStorage.setItem('overlayPos_' + id, JSON.stringify({ left, top })); } catch (e) {}
             }
@@ -99,7 +102,8 @@
                     el.style.top = defaultTop;
                 }
             }
-            // Data handler
+
+            // Extract wallet, XP, and bonus XP from incoming messages
             function extractOverlayData(event) {
                 let wallet = null, truckingXP = null, bonusXP = null;
                 if (event.data && event.data.type === 'data' && event.data.fromTycoonScript && event.data.data) {
@@ -170,7 +174,7 @@
                 }
                 return { wallet, truckingXP, bonusXP };
             }
-            // Main overlay logic
+            // Restore overlay and values on page load
             window.addEventListener('DOMContentLoaded', function() {
                 const overlay = document.getElementById('walletOverlay');
                 restoreOverlayPosition('walletOverlay', overlay, '10vw', '10vh');
@@ -190,13 +194,16 @@
                     document.getElementById('dataDisplay').style.display = 'none';
                 }
             });
-            // Listen for wallet and XP data in any message
+            // Track last job for overlay visibility
+            let lastJobName = null;
+
+            // Listen for messages from the game
             window.addEventListener('message', (event) => {
                 // Hide dataDisplay if overlay is shown
                 if (document.getElementById('walletOverlay').style.display !== 'none') {
                     document.getElementById('dataDisplay').style.display = 'none';
                 }
-                // Extract and update overlay
+                // Update overlay with new data
                 const { wallet, truckingXP, bonusXP } = extractOverlayData(event);
                 if (wallet != null || truckingXP != null || bonusXP != null) {
                     const overlay = document.getElementById('walletOverlay');
@@ -213,14 +220,14 @@
                     overlay.dataset.bonusXp = bonusXP != null ? bonusXP : '';
                 }
             });
-            // Escape key: pin the window (give control back to game)
+
+            // Pin the window (return control to game) on Escape
             window.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
                     window.parent.postMessage({type: 'pin'}, '*');
                 }
             });
         })();
-        // --- End Wallet N Truckin Overlay Script ---
     </script>
 </body>
 </html>
