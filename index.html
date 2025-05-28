@@ -33,6 +33,11 @@
 <body>
     </section>
     <div id="walletOverlay" style="display:none;position:fixed;top:10vh;left:10vw;width:220px;min-height:60px;max-height:30vh;background:rgba(30,30,30,0.92);color:#fff;z-index:9999;overflow:auto;padding:1rem 1.2rem;font-size:1.2rem;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.25);cursor:move;"></div>
+    <!-- Transparency slider for wallet overlay -->
+    <div id="walletTransparencyControl" style="display:none;position:fixed;top:calc(10vh + 34px);left:10vw;width:200px;height:50px;z-index:10000;padding:0.5rem 0.7rem 0.7rem 0.7rem;background:rgba(35,39,43,0.7);border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.10);font-size:1em;overflow:hidden;border:1px solid black;">
+        <label for="walletTransparencySlider" style="color:#fff;font-weight:600;">Transparency</label>
+        <input type="range" id="walletTransparencySlider" min="0.2" max="1" step="0.01" value="0.92" style="width: calc(100% - 32px); margin: 32 0px;">
+    </div>
     <script>
         // Merged jobExpTokenMap into this file
         const jobExpTokenMap = [
@@ -168,9 +173,62 @@
                 }
                 overlay.innerHTML = html;
                 overlay.style.display = '';
+
+                // Set overlay transparency
+                setOverlayAlpha(slider.value);
             }
 
-            // Make the overlay draggable
+            // --- Transparency slider logic ---
+            const overlay = document.getElementById('walletOverlay');
+            const transparencyControl = document.getElementById('walletTransparencyControl');
+            const slider = document.getElementById('walletTransparencySlider');
+            // Helper to set overlay background and text alpha (preserving color)
+            function setOverlayAlpha(alpha) {
+                overlay.style.background = `rgba(30,30,30,${alpha})`;
+                // Update all child elements' color alpha, preserving their color
+                Array.from(overlay.querySelectorAll('*')).forEach(el => {
+                    if (el.tagName !== 'BR') {
+                        // Get the original color from a data attribute or set it
+                        let orig = el.dataset.origColor;
+                        if (!orig) {
+                            orig = window.getComputedStyle(el).color;
+                            el.dataset.origColor = orig;
+                        }
+                        // Extract rgb values
+                        let match = orig.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+                        if (match) {
+                            el.style.color = `rgba(${match[1]},${match[2]},${match[3]},${alpha})`;
+                        } else {
+                            // fallback for hex or named colors
+                            el.style.opacity = alpha;
+                        }
+                    }
+                });
+            }
+            // Restore transparency from localStorage or default
+            function restoreOverlayAlpha() {
+                let alpha = localStorage.getItem('walletOverlay_alpha');
+                if (alpha === null) alpha = '0.92';
+                slider.value = alpha;
+                setOverlayAlpha(alpha);
+            }
+            // Save transparency to localStorage
+            slider && slider.addEventListener('input', function() {
+                setOverlayAlpha(this.value);
+                try { localStorage.setItem('walletOverlay_alpha', this.value); } catch (e) {}
+            });
+
+            // Show/hide the slider with the overlay, now accepts a boolean to force hide/show
+            function showTransparencyControl() {
+                transparencyControl.style.display = '';
+                transparencyControl.style.left = overlay.style.left;
+                transparencyControl.style.top = (parseInt(overlay.style.top, 10) + overlay.offsetHeight + 20) + 'px';
+            }
+            function hideTransparencyControl() {
+                transparencyControl.style.display = 'none';
+            }
+
+            // --- Patch overlay drag to move slider as well ---
             function makeDraggable(overlay) {
                 let isDragging = false, offsetX = 0, offsetY = 0;
                 overlay.addEventListener('mousedown', function(e) {
@@ -183,6 +241,9 @@
                     if (isDragging) {
                         overlay.style.left = (e.clientX - offsetX) + 'px';
                         overlay.style.top = (e.clientY - offsetY) + 'px';
+                        // Move the slider with the overlay
+                        transparencyControl.style.left = overlay.style.left;
+                        transparencyControl.style.top = (parseInt(overlay.style.top, 10) + overlay.offsetHeight + 4) + 'px';
                     }
                 });
                 document.addEventListener('mouseup', function() {
@@ -350,6 +411,11 @@
                     updateWalletOverlay(wallet, truckingXP, bonusXP);
                     overlay.style.display = '';
                 }
+                restoreOverlayAlpha();
+                // Show the slider if overlay is visible
+                if (overlay.style.display !== 'none') {
+                    showTransparencyControl();
+                }
             });
 
             // Check if jobExpTokenMap is loaded
@@ -359,9 +425,39 @@
                 // logToDebugPanel('jobExpTokenMap loaded successfully.');
             }
 
+            // Track focus state globally
+            let overlayIsFocused = false;
+
             // Refine message listener to ensure it updates the overlay correctly
             window.addEventListener('message', (event) => {
                 const overlay = document.getElementById('walletOverlay');
+
+                // Recursively search for "focused": true/false in event.data
+                function findFocused(obj) {
+                    if (!obj || typeof obj !== 'object') return null;
+                    if (Object.prototype.hasOwnProperty.call(obj, 'focused')) {
+                        return obj.focused;
+                    }
+                    for (const key in obj) {
+                        if (typeof obj[key] === 'object') {
+                            const result = findFocused(obj[key]);
+                            if (typeof result === 'boolean') return result;
+                        }
+                    }
+                    return null;
+                }
+
+                // Only process messages that contain a focused property
+                const focusResult = findFocused(event.data);
+                if (typeof focusResult === 'boolean') {
+                    overlayIsFocused = focusResult;
+                    if (overlayIsFocused) {
+                        showTransparencyControl();
+                    } else {
+                        hideTransparencyControl();
+                    }
+                }
+                // Do NOT show/hide the slider for any other message
 
                 // Extract wallet, XP, and bonus XP from incoming data
                 const { wallet, truckingXP, bonusXP, jobName } = extractOverlayData(event);
@@ -405,6 +501,16 @@
                     overlay.style.display = '';
                 }
             });
+
+            // Hide slider if overlay is hidden (optional, not strictly needed)
+            // window.addEventListener('resize', () => {
+            //     const overlay = document.getElementById('walletOverlay');
+            //     if (overlay.style.display === 'none') {
+            //         hideTransparencyControl();
+            //     } else {
+            //         showTransparencyControl();
+            //     }
+            // });
 
             // Pin the window (return control to game) on Escape
             window.addEventListener('keydown', (e) => {
