@@ -15,12 +15,48 @@
         input:focus, button:focus { outline: none; border: 1.5px solid #2d8cf0; box-shadow: 0 0 0 2px rgba(45,140,240,0.15); }
         button { background: rgba(45,140,240,0.5); color: #fff; border: 1px solid #2d8cf0; padding: 0.5rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: 600; letter-spacing: 0.5px; box-shadow: 0 1px 4px rgba(45,140,240,0.10); }
         button:hover { background: rgba(26,115,232,0.7); }
+        #debugPanel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            max-height: 20vh;
+            overflow-y: auto;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            font-size: 0.9em;
+            padding: 0.5em;
+            z-index: 10000;
+        }
     </style>
 </head>
 <body>
     </section>
     <div id="walletOverlay" style="display:none;position:fixed;top:10vh;left:10vw;width:220px;min-height:60px;max-height:30vh;background:rgba(30,30,30,0.92);color:#fff;z-index:9999;overflow:auto;padding:1rem 1.2rem;font-size:1.2rem;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.25);cursor:move;"></div>
     <script>
+        // Merged jobExpTokenMap into this file
+        const jobExpTokenMap = [
+          { jobName: "Businesses", itemId: "exp_token_a|business|business" },
+          { jobName: "EMS / Paramedic", itemId: "exp_token_a|ems|ems" },
+          { jobName: "Firefighter", itemId: "exp_token_a|ems|fire" },
+          { jobName: "Farmer", itemId: "exp_token_a|farming|farming" },
+          { jobName: "Fisherman", itemId: "exp_token_a|farming|fishing" },
+          { jobName: "Miner", itemId: "exp_token_a|farming|mining" },
+          { jobName: "Wildlife Hunter", itemId: "exp_token_a|hunting|skill" },
+          { jobName: "Strength", itemId: "exp_token_a|physical|strength" },
+          { jobName: "Cargo Pilot", itemId: "exp_token_a|piloting|cargos" },
+          { jobName: "Helicopter Pilot", itemId: "exp_token_a|piloting|heli" },
+          { jobName: "Airline Pilot", itemId: "exp_token_a|piloting|piloting" },
+          { jobName: "Player", itemId: "exp_token_a|player|player" },
+          { jobName: "Street Racer", itemId: "exp_token_a|player|racing" },
+          { jobName: "Bus Driver", itemId: "exp_token_a|train|bus" },
+          { jobName: "Train Conductor", itemId: "exp_token_a|train|train" },
+          { jobName: "Garbage Collector", itemId: "exp_token_a|trucking|garbage" },
+          { jobName: "Mechanic", itemId: "exp_token_a|trucking|mechanic" },
+          { jobName: "PostOP Driver", itemId: "exp_token_a|trucking|postop" },
+          { jobName: "Trucker", itemId: "exp_token_a|trucking|trucking" }
+        ];
+
         // --- Wallet N Truckin Overlay Script ---
         (function() {
             // Format wallet and XP values
@@ -39,24 +75,96 @@
                 return percent.toFixed(2) + '%';
             }
 
+            // --- Add this global cache for XP data ---
+            let lastXpData = null;
+
             // Update the overlay with wallet, XP, and bonus XP
-            function updateWalletOverlay(wallet, truckingXP, bonusXP) {
+            function updateWalletOverlay(wallet, truckingXP, bonusXP, jobName) {
+                // Only log if something actually changed (handled in message event)
+                // logToDebugPanel(`updateWalletOverlay called with: wallet=${wallet}, truckingXP=${truckingXP}, bonusXP=${bonusXP}, jobName=${jobName}`);
+
+                // Add a console log to display what the script is looking for when updating the wallet
+                // console.log(`Updating wallet with values: wallet=${wallet}, truckingXP=${truckingXP}, bonusXP=${bonusXP}, jobName=${jobName}`);
+
                 const overlay = document.getElementById('walletOverlay');
                 try {
                     // Only store valid values in localStorage
                     if (wallet != null && !isNaN(wallet)) localStorage.setItem('walletOverlay_wallet', wallet);
                     if (truckingXP != null && !isNaN(truckingXP)) localStorage.setItem('walletOverlay_truckingXp', truckingXP);
                     if (bonusXP != null && !isNaN(bonusXP)) localStorage.setItem('walletOverlay_bonusXp', bonusXP);
-                } catch (e) {}
+                    if (jobName) localStorage.setItem('walletOverlay_jobName', jobName);
+                } catch (e) {
+                    // logToDebugPanel(`Error storing values in localStorage: ${e}`);
+                }
+
+                // Cross-reference job name with jobExpTokenMap
+                let jobToken = jobName;
+                if (jobName) {
+                  const jobEntry = jobExpTokenMap.find(entry => entry.jobName.toLowerCase() === jobName.toLowerCase());
+                  if (jobEntry) {
+                    jobToken = jobEntry.itemId;
+                  } else {
+                    // logToDebugPanel(`No matching job found for jobName: ${jobName}`);
+                  }
+                } else {
+                  // logToDebugPanel('jobName is undefined or null.');
+                }
 
                 // Format and update the overlay content
                 let html = `<b>Wallet:</b> <span style="font-size:1.3em;color:#7cff7c;">${wallet != null && !isNaN(wallet) ? formatWallet(wallet) : 'N/A'}</span>`;
-                html += `<br><b>Trucking XP:</b> <span style="font-size:1.1em;color:#8cf0ff;">${truckingXP != null && !isNaN(truckingXP) ? formatTruckingXP(truckingXP) : '0%'}</span>`;
-                if (truckingXP != null && !isNaN(truckingXP)) {
-                    html += `<br><b>Raw XP:</b> <span style='font-size:1.1em;color:#ffb347;'>${Number(truckingXP).toLocaleString()}</span>`;
+
+                // If job is Unemployed, only show wallet and job
+                if (jobName && jobName.toLowerCase() === "unemployed") {
+                    html += `<br><b>Job:</b> <span style='font-size:1.1em;color:#ffa07a;'>${jobName}</span>`;
+                    overlay.innerHTML = html;
+                    overlay.style.display = '';
+                    return;
+                }
+
+                // --- Dynamically select XP field based on jobName ---
+                const jobExpFieldMap = {
+                    "Trucker": "exp_trucking_trucking",
+                    "Mechanic": "exp_trucking_mechanic",
+                    "Garbage Collector": "exp_trucking_garbage",
+                    "PostOP Driver": "exp_trucking_postop",
+                    "Airline Pilot": "exp_piloting_piloting",
+                    "Helicopter Pilot": "exp_piloting_heli",
+                    "Cargo Pilot": "exp_piloting_cargos",
+                    "Bus Driver": "exp_train_bus",
+                    "Train Conductor": "exp_train_train",
+                    "EMS / Paramedic": "exp_ems_ems",
+                    "Firefighter": "exp_ems_fire",
+                    "Businesses": "exp_business_business",
+                    "Player": "exp_player_player",
+                    "Street Racer": "exp_player_racing",
+                    "Farmer": "exp_farming_farming",
+                    "Fisherman": "exp_farming_fishing",
+                    "Miner": "exp_farming_mining",
+                    "Wildlife Hunter": "exp_hunting_skill",
+                    "Strength": "exp_physical_strength"
+                };
+
+                // Find the correct XP value for the current job using lastXpData, fallback to truckingXP
+                let xpVal = null;
+                if (jobName && typeof jobExpFieldMap[jobName] === "string" && lastXpData) {
+                    const xpField = jobExpFieldMap[jobName];
+                    if (typeof lastXpData[xpField] !== "undefined") {
+                        xpVal = Number(lastXpData[xpField]);
+                    }
+                }
+                if (xpVal == null && typeof truckingXP !== "undefined" && truckingXP !== null) {
+                    xpVal = Number(truckingXP);
+                }
+
+                html += `<br><b>${jobName || 'XP'}:</b> <span style="font-size:1.1em;color:#8cf0ff;">${xpVal != null && !isNaN(xpVal) ? (Math.max(0, Math.min(100, (xpVal / 1_000_000) * 100)).toFixed(2) + '%') : '0%'}</span>`;
+                if (xpVal != null && !isNaN(xpVal)) {
+                    html += `<br><b>Raw XP:</b> <span style='font-size:1.1em;color:#ffb347;'>${xpVal.toLocaleString()}</span>`;
                 }
                 if (bonusXP != null && !isNaN(bonusXP)) {
                     html += `<br><b>Bonus XP Left:</b> <span style='font-size:1.1em;color:#ffd700;'>${Number(bonusXP).toLocaleString()}</span>`;
+                }
+                if (jobName) {
+                    html += `<br><b>Job:</b> <span style='font-size:1.1em;color:#ffa07a;'>${jobName}</span>`;
                 }
                 overlay.innerHTML = html;
                 overlay.style.display = '';
@@ -107,14 +215,48 @@
             }
 
             // Extract wallet, XP, and bonus XP from incoming messages
+            let lastJobName = null; // Track last known job name
+            let lastInventoryObj = null; // Cache the last inventory object
+
             function extractOverlayData(event) {
-                let wallet = null, truckingXP = null, bonusXP = null;
+                let wallet = null, truckingXP = null, bonusXP = null, jobName = null;
+                let jobChanged = false;
+                // --- Cache the latest XP data if present ---
+                if (event.data && event.data.type === 'data' && event.data.fromTycoonScript && event.data.data) {
+                    const data = event.data.data;
+                    // If any exp_ field is present, update the cache
+                    for (const k of [
+                        "exp_trucking_mechanic","exp_piloting_cargos","exp_farming_mining","exp_business_business",
+                        "exp_trucking_garbage","exp_trucking_trucking","exp_player_player","exp_ems_ems","exp_player_racing",
+                        "exp_train_bus","exp_ems_fire","exp_train_train","exp_trucking_postop","exp_piloting_heli",
+                        "exp_business_faction","exp_farming_farming","exp_farming_fishing","exp_hunting_skill",
+                        "exp_piloting_piloting","exp_physical_strength"
+                    ]) {
+                        if (typeof data[k] !== "undefined") {
+                            lastXpData = data;
+                            break;
+                        }
+                    }
+                }
                 if (event.data && event.data.type === 'data' && event.data.fromTycoonScript && event.data.data) {
                     const data = event.data.data;
                     wallet = data.wallet ?? null;
                     truckingXP = data.exp_trucking_trucking ?? data.truckingXP ?? null;
 
-                    // Parse inventory for bonus XP
+                    // Only update jobName if present in incoming data
+                    if (typeof data.job_name !== "undefined" || typeof data.job_title !== "undefined") {
+                        jobName = data.job_name ?? data.job_title ?? null;
+                        if (jobName !== lastJobName) {
+                            // logToDebugPanel(`Job title updated to: ${jobName}`);
+                            jobChanged = true;
+                            lastJobName = jobName;
+                        }
+                    } else {
+                        // Use last known job name if not present in this message
+                        jobName = lastJobName;
+                    }
+
+                    // Parse inventory for bonus XP and cache it
                     let inventoryObj = null;
                     if (data.inventory) {
                         if (typeof data.inventory === 'string') {
@@ -122,20 +264,67 @@
                         } else if (typeof data.inventory === 'object') {
                             inventoryObj = data.inventory;
                         }
+                        if (inventoryObj) {
+                            lastInventoryObj = inventoryObj;
+                        }
                     }
+                    // Use cached inventory if not present in this message
+                    if (!inventoryObj && lastInventoryObj) {
+                        inventoryObj = lastInventoryObj;
+                    }
+
+                    // If job changed, pull bonusXP from cached inventory
                     if (inventoryObj) {
-                        for (const key in inventoryObj) {
-                            if (/exp_token_a\|trucking\|trucking/i.test(key)) {
-                                const item = inventoryObj[key];
-                                if (item && typeof item.amount === 'number') {
-                                    bonusXP = item.amount;
-                                    break;
+                        let found = false;
+                        let lastBonusXP = null;
+                        if (jobName) {
+                          const jobEntry = jobExpTokenMap.find(entry => entry.jobName.toLowerCase() === jobName.toLowerCase());
+                          if (jobEntry) {
+                            const itemName = jobEntry.itemId;
+                            for (const key in inventoryObj) {
+                                if (key.toLowerCase() === itemName.toLowerCase()) {
+                                    const item = inventoryObj[key];
+                                    if (item && typeof item.amount === 'number') {
+                                        lastBonusXP = item.amount;
+                                        if (bonusXP !== lastBonusXP) {
+                                            bonusXP = item.amount;
+                                            // logToDebugPanel(`Matched job token: ${itemName} with bonusXP=${bonusXP}`);
+                                        }
+                                        found = true;
+                                        break;
+                                    }
                                 }
                             }
+                          } else {
+                            // logToDebugPanel(`No matching job found in jobExpTokenMap for jobName: ${jobName}`);
+                            // Do NOT fallback to any token if jobName is present but not mapped
+                          }
+                        }
+                        // Only log fallback check if not found or jobName changed
+                        if (!found || jobChanged) {
+                            // logToDebugPanel(`Fallback check: found=${found}, jobName=${jobName}`);
+                        }
+                        // Fallback: only if jobName is missing/empty AND no match was found
+                        if (!found && !jobName) {
+                          // logToDebugPanel('Running fallback: jobName is missing/empty and no match was found.');
+                          for (const key in inventoryObj) {
+                            if (/^exp_token_a\|/i.test(key)) {
+                              const item = inventoryObj[key];
+                              if (item && typeof item.amount === 'number') {
+                                bonusXP = item.amount;
+                                // logToDebugPanel(`Fallback: Found bonusXP=${bonusXP} for key=${key}`);
+                                break;
+                              }
+                            }
+                          }
+                        } else if (!found && jobName) {
+                          // logToDebugPanel('No bonusXP found for mapped job, and fallback is NOT run because jobName is present.');
+                          // Set bonusXP to 0 if not found for mapped job and fallback is not run
+                          bonusXP = 0;
                         }
                     }
                 }
-                return { wallet, truckingXP, bonusXP };
+                return { wallet, truckingXP, bonusXP, jobName };
             }
             // Restore overlay and values on page load
             window.addEventListener('DOMContentLoaded', function() {
@@ -163,26 +352,54 @@
                 }
             });
 
+            // Check if jobExpTokenMap is loaded
+            if (typeof jobExpTokenMap === 'undefined') {
+                // logToDebugPanel('Error: jobExpTokenMap is not loaded.');
+            } else {
+                // logToDebugPanel('jobExpTokenMap loaded successfully.');
+            }
+
             // Refine message listener to ensure it updates the overlay correctly
             window.addEventListener('message', (event) => {
                 const overlay = document.getElementById('walletOverlay');
 
                 // Extract wallet, XP, and bonus XP from incoming data
-                const { wallet, truckingXP, bonusXP } = extractOverlayData(event);
+                const { wallet, truckingXP, bonusXP, jobName } = extractOverlayData(event);
 
-                // Ensure valid data exists before updating the overlay
-                if (wallet != null || truckingXP != null || bonusXP != null) {
-                    const currentWallet = wallet != null ? wallet : (overlay.dataset.wallet ? Number(overlay.dataset.wallet) : null);
-                    const currentTruckingXP = truckingXP != null ? truckingXP : (overlay.dataset.truckingXp ? Number(overlay.dataset.truckingXp) : null);
-                    const currentBonusXP = bonusXP != null ? bonusXP : (overlay.dataset.bonusXp ? Number(overlay.dataset.bonusXp) : null);
+                // Only log jobName if it changed
+                if (jobName !== overlay.dataset.jobName) {
+                    // logToDebugPanel(`Received jobName: ${jobName}`);
+                }
 
+                // Only log updateWalletOverlay invocation if jobName, wallet, truckingXP, or bonusXP changed
+                const currentWallet = wallet != null ? wallet : (overlay.dataset.wallet ? Number(overlay.dataset.wallet) : null);
+                const currentTruckingXP = truckingXP != null ? truckingXP : (overlay.dataset.truckingXp ? Number(overlay.dataset.truckingXp) : null);
+                const currentBonusXP = bonusXP != null ? bonusXP : (overlay.dataset.bonusXp ? Number(overlay.dataset.bonusXp) : null);
+                const currentJobName = jobName || overlay.dataset.jobName || '';
+
+                const prevWallet = overlay.dataset.wallet ? Number(overlay.dataset.wallet) : null;
+                const prevTruckingXP = overlay.dataset.truckingXp ? Number(overlay.dataset.truckingXp) : null;
+                const prevBonusXP = overlay.dataset.bonusXp ? Number(overlay.dataset.bonusXp) : null;
+                const prevJobName = overlay.dataset.jobName || '';
+
+                const shouldUpdate =
+                    currentWallet !== prevWallet ||
+                    currentTruckingXP !== prevTruckingXP ||
+                    currentBonusXP !== prevBonusXP ||
+                    currentJobName !== prevJobName;
+
+                if (wallet != null || truckingXP != null || bonusXP != null || jobName) {
+                    if (shouldUpdate) {
+                        // logToDebugPanel(`Invoking updateWalletOverlay with jobName: ${currentJobName}`);
+                    }
                     // Update the overlay dynamically
-                    updateWalletOverlay(currentWallet, currentTruckingXP, currentBonusXP);
+                    updateWalletOverlay(currentWallet, currentTruckingXP, currentBonusXP, currentJobName);
 
                     // Update dataset attributes for fallback
                     overlay.dataset.wallet = currentWallet != null ? currentWallet : '';
                     overlay.dataset.truckingXp = currentTruckingXP != null ? currentTruckingXP : '';
                     overlay.dataset.bonusXp = currentBonusXP != null ? currentBonusXP : '';
+                    overlay.dataset.jobName = currentJobName;
 
                     // Ensure the overlay is visible
                     overlay.style.display = '';
