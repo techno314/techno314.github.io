@@ -85,12 +85,8 @@
                 return percent.toFixed(2) + '%';
             }
 
-            // --- Add this global cache for XP data ---
-            let lastXpData = null;
-            // --- Remove variables to track XP rate per hour ---
-            let lastXpPercent = null;
-            let lastXpPercentTimestamp = null;
-            let lastXpJob = null;
+            // --- Add this global cache for XP data per job ---
+            let jobXpCache = {};
 
             // --- Overlay options logic ---
             const overlayOptionsDefaults = {
@@ -188,10 +184,15 @@
                     "Wildlife Hunter": "exp_hunting_skill",
                 };
                 let xpVal = null;
-                if (jobName && typeof jobExpFieldMap[jobName] === "string" && lastXpData) {
-                    const xpField = jobExpFieldMap[jobName];
-                    if (typeof lastXpData[xpField] !== "undefined") {
-                        xpVal = Number(lastXpData[xpField]);
+                if (jobName && typeof jobExpFieldMap[jobName] === "string") {
+                    // Use cached XP for this job if available
+                    if (typeof jobXpCache[jobName] !== "undefined") {
+                        xpVal = Number(jobXpCache[jobName]);
+                    } else if (lastXpData) {
+                        const xpField = jobExpFieldMap[jobName];
+                        if (typeof lastXpData[xpField] !== "undefined") {
+                            xpVal = Number(lastXpData[xpField]);
+                        }
                     }
                 }
                 if (xpVal == null && typeof truckingXP !== "undefined" && truckingXP !== null) {
@@ -344,6 +345,13 @@
                     ]) {
                         if (typeof data[k] !== "undefined") {
                             lastXpData = data;
+                            // --- Cache XP data for each job ---
+                            for (const job in jobExpFieldMap) {
+                                const xpField = jobExpFieldMap[job];
+                                if (typeof data[xpField] !== "undefined") {
+                                    jobXpCache[job] = data[xpField];
+                                }
+                            }
                             break;
                         }
                     }
