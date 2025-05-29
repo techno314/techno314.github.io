@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wallet N Truckin3</title>
+    <title>Wallet N Truckin</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: transparent; color: #f0f0f0; }
         header { background: rgba(35,39,43,0.85); padding: 1rem; text-align: center; font-size: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
@@ -34,25 +34,29 @@
     </section>
     <div id="walletOverlay" style="display:none;position:fixed;top:10vh;left:10vw;width:220px;min-height:60px;max-height:30vh;background:rgba(30,30,30,0.92);color:#fff;z-index:9999;overflow:auto;padding:1rem 1.2rem;font-size:1.2rem;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.25);cursor:move;"></div>
     <!-- Transparency slider for wallet overlay -->
-    <div id="walletTransparencyControl" style="display:none;position:fixed;top:calc(10vh + 34px);left:10vw;width:200px;height:50px;z-index:10000;padding:0.5rem 0.7rem 0.7rem 0.7rem;background:rgba(35,39,43,0.7);border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.10);font-size:1em;overflow:hidden;border:1px solid black;">
+    <div id="walletTransparencyControl" style="display:none;position:fixed;top:calc(10vh + 34px);left:10vw;width:200px;height:auto;z-index:10000;padding:0.5rem 0.7rem 0.7rem 0.7rem;background:rgba(35,39,43,0.7);border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.10);font-size:1em;overflow:hidden;border:1px solid black;">
         <label for="walletTransparencySlider" style="color:#fff;font-weight:600;">Transparency</label>
         <input type="range" id="walletTransparencySlider" min="0.2" max="1" step="0.01" value="0.92" style="width: calc(100% - 32px); margin: 32 0px;">
+        <div id="overlayOptionsPanel" style="margin-top:0.7em;">
+            <label style="color:#fff;"><input type="checkbox" id="showWallet"/> Wallet</label>
+            <label style="color:#fff;"><input type="checkbox" id="showXPPercent"/> XP %</label>
+            <label style="color:#fff;"><input type="checkbox" id="showRawXP"/> Raw XP</label>
+            <label style="color:#fff;"><input type="checkbox" id="showBonusXP"/> Bonus XP</label>
+            <label style="color:#fff;"><input type="checkbox" id="showJob"/> Job</label>
+        </div>
     </div>
     <script>
         // Merged jobExpTokenMap into this file
         const jobExpTokenMap = [
-          { jobName: "Businesses", itemId: "exp_token_a|business|business" },
           { jobName: "EMS / Paramedic", itemId: "exp_token_a|ems|ems" },
           { jobName: "Firefighter", itemId: "exp_token_a|ems|fire" },
           { jobName: "Farmer", itemId: "exp_token_a|farming|farming" },
           { jobName: "Fisherman", itemId: "exp_token_a|farming|fishing" },
           { jobName: "Miner", itemId: "exp_token_a|farming|mining" },
           { jobName: "Wildlife Hunter", itemId: "exp_token_a|hunting|skill" },
-          { jobName: "Strength", itemId: "exp_token_a|physical|strength" },
           { jobName: "Cargo Pilot", itemId: "exp_token_a|piloting|cargos" },
           { jobName: "Helicopter Pilot", itemId: "exp_token_a|piloting|heli" },
           { jobName: "Airline Pilot", itemId: "exp_token_a|piloting|piloting" },
-          { jobName: "Player", itemId: "exp_token_a|player|player" },
           { jobName: "Street Racer", itemId: "exp_token_a|player|racing" },
           { jobName: "Bus Driver", itemId: "exp_token_a|train|bus" },
           { jobName: "Train Conductor", itemId: "exp_token_a|train|train" },
@@ -82,8 +86,59 @@
 
             // --- Add this global cache for XP data ---
             let lastXpData = null;
+            // --- Remove variables to track XP rate per hour ---
+            let lastXpPercent = null;
+            let lastXpPercentTimestamp = null;
+            let lastXpJob = null;
 
-            // Update the overlay with wallet, XP, and bonus XP
+            // --- Overlay options logic ---
+            const overlayOptionsDefaults = {
+                showWallet: true,
+                showXPPercent: true,
+                showRawXP: true,
+                showBonusXP: true,
+                showJob: true
+            };
+            function getOverlayOptions() {
+                let opts = {};
+                try {
+                    const saved = JSON.parse(localStorage.getItem('walletOverlay_options'));
+                    opts = { ...overlayOptionsDefaults, ...saved };
+                } catch (e) { opts = { ...overlayOptionsDefaults }; }
+                return opts;
+            }
+            function saveOverlayOptions(opts) {
+                try { localStorage.setItem('walletOverlay_options', JSON.stringify(opts)); } catch (e) {}
+            }
+            function updateOverlayOptionsPanel() {
+                const opts = getOverlayOptions();
+                document.getElementById('showWallet').checked = !!opts.showWallet;
+                document.getElementById('showXPPercent').checked = !!opts.showXPPercent;
+                // document.getElementById('showXPPerHour').checked = ... (removed)
+                document.getElementById('showRawXP').checked = !!opts.showRawXP;
+                document.getElementById('showBonusXP').checked = !!opts.showBonusXP;
+                document.getElementById('showJob').checked = !!opts.showJob;
+            }
+            function listenOverlayOptionsPanel() {
+                ['showWallet','showXPPercent','showRawXP','showBonusXP','showJob'].forEach(id => {
+                    document.getElementById(id).addEventListener('change', function() {
+                        const opts = getOverlayOptions();
+                        opts[id] = this.checked;
+                        saveOverlayOptions(opts);
+                        updateWalletOverlayFromDataset();
+                    });
+                });
+            }
+            function updateWalletOverlayFromDataset() {
+                const overlay = document.getElementById('walletOverlay');
+                let wallet = overlay.dataset.wallet ? Number(overlay.dataset.wallet) : null;
+                let truckingXP = overlay.dataset.truckingXp ? Number(overlay.dataset.truckingXp) : null;
+                let bonusXP = overlay.dataset.bonusXp ? Number(overlay.dataset.bonusXp) : null;
+                let jobName = overlay.dataset.jobName || '';
+                updateWalletOverlay(wallet, truckingXP, bonusXP, jobName);
+            }
+
+            // Update the overlay with wallet, truckingXP, and bonus XP
             function updateWalletOverlay(wallet, truckingXP, bonusXP, jobName) {
                 // Only log if something actually changed (handled in message event)
                 // logToDebugPanel(`updateWalletOverlay called with: wallet=${wallet}, truckingXP=${truckingXP}, bonusXP=${bonusXP}, jobName=${jobName}`);
@@ -108,24 +163,8 @@
                   const jobEntry = jobExpTokenMap.find(entry => entry.jobName.toLowerCase() === jobName.toLowerCase());
                   if (jobEntry) {
                     jobToken = jobEntry.itemId;
-                  } else {
-                    // logToDebugPanel(`No matching job found for jobName: ${jobName}`);
                   }
-                } else {
-                  // logToDebugPanel('jobName is undefined or null.');
                 }
-
-                // Format and update the overlay content
-                let html = `<b>Wallet:</b> <span style="font-size:1.3em;color:#7cff7c;">${wallet != null && !isNaN(wallet) ? formatWallet(wallet) : 'N/A'}</span>`;
-
-                // If job is Unemployed, only show wallet and job
-                if (jobName && jobName.toLowerCase() === "unemployed") {
-                    html += `<br><b>Job:</b> <span style='font-size:1.1em;color:#ffa07a;'>${jobName}</span>`;
-                    overlay.innerHTML = html;
-                    overlay.style.display = '';
-                    return;
-                }
-
                 // --- Dynamically select XP field based on jobName ---
                 const jobExpFieldMap = {
                     "Trucker": "exp_trucking_trucking",
@@ -140,16 +179,12 @@
                     "EMS / Paramedic": "exp_ems_ems",
                     "Firefighter": "exp_ems_fire",
                     "Businesses": "exp_business_business",
-                    "Player": "exp_player_player",
                     "Street Racer": "exp_player_racing",
                     "Farmer": "exp_farming_farming",
                     "Fisherman": "exp_farming_fishing",
                     "Miner": "exp_farming_mining",
                     "Wildlife Hunter": "exp_hunting_skill",
-                    "Strength": "exp_physical_strength"
                 };
-
-                // Find the correct XP value for the current job using lastXpData, fallback to truckingXP
                 let xpVal = null;
                 if (jobName && typeof jobExpFieldMap[jobName] === "string" && lastXpData) {
                     const xpField = jobExpFieldMap[jobName];
@@ -160,21 +195,30 @@
                 if (xpVal == null && typeof truckingXP !== "undefined" && truckingXP !== null) {
                     xpVal = Number(truckingXP);
                 }
-
-                html += `<br><b>${jobName || 'XP'}:</b> <span style="font-size:1.1em;color:#8cf0ff;">${xpVal != null && !isNaN(xpVal) ? (Math.max(0, Math.min(100, (xpVal / 1_000_000) * 100)).toFixed(2) + '%') : '0%'}</span>`;
-                if (xpVal != null && !isNaN(xpVal)) {
-                    html += `<br><b>Raw XP:</b> <span style='font-size:1.1em;color:#ffb347;'>${xpVal.toLocaleString()}</span>`;
+                let xpPercent = xpVal != null && !isNaN(xpVal) ? (Math.max(0, Math.min(100, (xpVal / 1_000_000) * 100))) : 0;
+                let now = Date.now();
+                if (jobName !== lastXpJob || (lastXpPercent != null && xpPercent < lastXpPercent)) {
+                    lastXpPercent = xpPercent;
+                    lastXpPercentTimestamp = now;
+                    lastXpJob = jobName;
+                } else if (lastXpPercent != null && xpPercent > lastXpPercent) {
+                    lastXpPercent = xpPercent;
+                    lastXpPercentTimestamp = now;
+                } else if (lastXpPercent == null) {
+                    lastXpPercent = xpPercent;
+                    lastXpPercentTimestamp = now;
+                    lastXpJob = jobName;
                 }
-                if (bonusXP != null && !isNaN(bonusXP)) {
-                    html += `<br><b>Bonus XP Left:</b> <span style='font-size:1.1em;color:#ffd700;'>${Number(bonusXP).toLocaleString()}</span>`;
-                }
-                if (jobName) {
-                    html += `<br><b>Job:</b> <span style='font-size:1.1em;color:#ffa07a;'>${jobName}</span>`;
-                }
-                overlay.innerHTML = html;
+                // --- Compose overlay fields based on options ---
+                const opts = getOverlayOptions();
+                let fields = [];
+                if (opts.showWallet) fields.push(`<b>Wallet:</b> <span style=\"font-size:1.3em;color:#7cff7c;\">${wallet != null && !isNaN(wallet) ? formatWallet(wallet) : 'N/A'}</span>`);
+                if (opts.showXPPercent) fields.push(`<b>${jobName ? jobName : 'XP'}:</b> <span style=\"font-size:1.1em;color:#8cf0ff;\">${xpPercent.toFixed(2)}%</span>`);
+                if (opts.showRawXP) fields.push(`<b>Raw XP:</b> <span style='font-size:1.1em;color:#ffb347;'>${xpVal != null && !isNaN(xpVal) ? xpVal.toLocaleString() : 'N/A'}</span>`);
+                if (opts.showBonusXP) fields.push(`<b>Bonus XP Left:</b> <span style='font-size:1.1em;color:#ffd700;'>${bonusXP != null && !isNaN(bonusXP) ? Number(bonusXP).toLocaleString() : 'N/A'}</span>`);
+                if (opts.showJob && jobName) fields.push(`<b>Job:</b> <span style='font-size:1.1em;color:#ffa07a;'>${jobName}</span>`);
+                overlay.innerHTML = fields.join('<br>');
                 overlay.style.display = '';
-
-                // Set overlay transparency
                 setOverlayAlpha(slider.value);
             }
 
@@ -218,7 +262,7 @@
                 try { localStorage.setItem('walletOverlay_alpha', this.value); } catch (e) {}
             });
 
-            // Show/hide the slider with the overlay, now accepts a boolean to force hide/show
+            // Show/hide the slider and options with the overlay
             function showTransparencyControl() {
                 transparencyControl.style.display = '';
                 transparencyControl.style.left = overlay.style.left;
@@ -288,10 +332,10 @@
                     // If any exp_ field is present, update the cache
                     for (const k of [
                         "exp_trucking_mechanic","exp_piloting_cargos","exp_farming_mining","exp_business_business",
-                        "exp_trucking_garbage","exp_trucking_trucking","exp_player_player","exp_ems_ems","exp_player_racing",
+                        "exp_trucking_garbage","exp_trucking_trucking","exp_ems_ems","exp_player_racing",
                         "exp_train_bus","exp_ems_fire","exp_train_train","exp_trucking_postop","exp_piloting_heli",
                         "exp_business_faction","exp_farming_farming","exp_farming_fishing","exp_hunting_skill",
-                        "exp_piloting_piloting","exp_physical_strength"
+                        "exp_piloting_piloting"
                     ]) {
                         if (typeof data[k] !== "undefined") {
                             lastXpData = data;
@@ -416,6 +460,8 @@
                 if (overlay.style.display !== 'none') {
                     showTransparencyControl();
                 }
+                updateOverlayOptionsPanel();
+                listenOverlayOptionsPanel();
             });
 
             // Check if jobExpTokenMap is loaded
