@@ -39,6 +39,7 @@
         <input type="range" id="walletTransparencySlider" min="0.2" max="1" step="0.01" value="0.92" style="width: calc(100% - 32px); margin: 32 0px;">
         <div id="overlayOptionsPanel" style="margin-top:0.7em;">
             <label style="color:#fff;"><input type="checkbox" id="showWallet"/> Wallet</label>
+            <label style="color:#fff;"><input type="checkbox" id="showLevel"/> Level</label>
             <label style="color:#fff;"><input type="checkbox" id="showXPPercent"/> XP %</label>
             <label style="color:#fff;"><input type="checkbox" id="showRawXP"/> Raw XP</label>
             <label style="color:#fff;"><input type="checkbox" id="showBonusXP"/> Bonus XP</label>
@@ -97,7 +98,8 @@
                 showXPPercent: true,
                 showRawXP: true,
                 showBonusXP: true,
-                showJob: true
+                showJob: true,
+                showLevel: true // New option for Level
             };
             function getOverlayOptions() {
                 let opts = {};
@@ -114,13 +116,13 @@
                 const opts = getOverlayOptions();
                 document.getElementById('showWallet').checked = !!opts.showWallet;
                 document.getElementById('showXPPercent').checked = !!opts.showXPPercent;
-                // document.getElementById('showXPPerHour').checked = ... (removed)
                 document.getElementById('showRawXP').checked = !!opts.showRawXP;
                 document.getElementById('showBonusXP').checked = !!opts.showBonusXP;
                 document.getElementById('showJob').checked = !!opts.showJob;
+                document.getElementById('showLevel').checked = !!opts.showLevel; // New
             }
             function listenOverlayOptionsPanel() {
-                ['showWallet','showXPPercent','showRawXP','showBonusXP','showJob'].forEach(id => {
+                ['showWallet','showXPPercent','showRawXP','showBonusXP','showJob','showLevel'].forEach(id => {
                     document.getElementById(id).addEventListener('change', function() {
                         const opts = getOverlayOptions();
                         opts[id] = this.checked;
@@ -212,7 +214,10 @@
                 // --- Compose overlay fields based on options ---
                 const opts = getOverlayOptions();
                 let fields = [];
-                if (opts.showWallet) fields.push(`<b>Wallet:</b> <span style=\"font-size:1.3em;color:#7cff7c;\">${wallet != null && !isNaN(wallet) ? formatWallet(wallet) : 'N/A'}</span>`);
+                if (opts.showWallet) fields.push(`<b>Wallet:</b> <span style=\"font-size:1.3em;color:#7cff7c;\">${wallet != null && !isNaN(wallet) ? formatWallet(wallet) : 'N/A'}</span>`);                if (opts.showLevel) {
+                    let level = (xpVal != null && !isNaN(xpVal)) ? Math.floor((Math.sqrt(1 + 8 * xpVal / 5) - 1) / 2) : null;
+                    fields.push(`<b>Level:</b> <span style='font-size:1.1em;color:#b0e0e6;'>${level != null && level >= 0 ? level : 'N/A'}</span>`);
+                }
                 if (opts.showXPPercent) fields.push(`<b>${jobName ? jobName : 'XP'}:</b> <span style=\"font-size:1.1em;color:#8cf0ff;\">${xpPercent.toFixed(2)}%</span>`);
                 if (opts.showRawXP) fields.push(`<b>Raw XP:</b> <span style='font-size:1.1em;color:#ffb347;'>${xpVal != null && !isNaN(xpVal) ? xpVal.toLocaleString() : 'N/A'}</span>`);
                 if (opts.showBonusXP) fields.push(`<b>Bonus XP Left:</b> <span style='font-size:1.1em;color:#ffd700;'>${bonusXP != null && !isNaN(bonusXP) ? Number(bonusXP).toLocaleString() : 'N/A'}</span>`);
