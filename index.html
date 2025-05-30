@@ -88,6 +88,32 @@
             // --- Add this global cache for XP data per job ---
             let jobXpCache = {};
 
+            // --- Add missing global variables for XP tracking ---
+            let lastXpJob = null;
+            let lastXpPercent = null;
+            let lastXpPercentTimestamp = null;
+
+            // --- Move jobExpFieldMap to global scope so it is always defined ---
+            const jobExpFieldMap = {
+                "Trucker": "exp_trucking_trucking",
+                "Mechanic": "exp_trucking_mechanic",
+                "Garbage Collector": "exp_trucking_garbage",
+                "PostOP Driver": "exp_trucking_postop",
+                "Airline Pilot": "exp_piloting_piloting",
+                "Helicopter Pilot": "exp_piloting_heli",
+                "Cargo Pilot": "exp_piloting_cargos",
+                "Bus Driver": "exp_train_bus",
+                "Train Conductor": "exp_train_train",
+                "EMS / Paramedic": "exp_ems_ems",
+                "Firefighter": "exp_ems_fire",
+                "Businesses": "exp_business_business",
+                "Street Racer": "exp_player_racing",
+                "Farmer": "exp_farming_farming",
+                "Fisherman": "exp_farming_fishing",
+                "Miner": "exp_farming_mining",
+                "Wildlife Hunter": "exp_hunting_skill",
+            };
+
             // --- Overlay options logic ---
             const overlayOptionsDefaults = {
                 showWallet: true,
@@ -215,14 +241,21 @@
                 // --- Compose overlay fields based on options ---
                 const opts = getOverlayOptions();
                 let fields = [];
-                if (opts.showWallet) fields.push(`<b>Wallet:</b> <span style=\"font-size:1.3em;color:#7cff7c;\">${wallet != null && !isNaN(wallet) ? formatWallet(wallet) : 'N/A'}</span>`);                if (opts.showLevel) {
-                    let level = (xpVal != null && !isNaN(xpVal)) ? Math.floor((Math.sqrt(1 + 8 * xpVal / 5) - 1) / 2) : null;
-                    fields.push(`<b>Level:</b> <span style='font-size:1.1em;color:#b0e0e6;'>${level != null && level >= 0 ? level : 'N/A'}</span>`);
+                // Detect if unemployed (jobName is "Unemployed", empty, or null)
+                const isUnemployed = !jobName || jobName.trim().toLowerCase() === 'unemployed';
+                if (opts.showWallet) fields.push(`<b>Wallet:</b> <span style=\"font-size:1.3em;color:#7cff7c;\">${wallet != null && !isNaN(wallet) ? formatWallet(wallet) : 'N/A'}</span>`);
+                if (isUnemployed) {
+                    if (opts.showJob && jobName) fields.push(`<b>Job:</b> <span style='font-size:1.1em;color:#ffa07a;'>${jobName}</span>`);
+                } else {
+                    if (opts.showLevel) {
+                        let level = (xpVal != null && !isNaN(xpVal)) ? Math.floor((Math.sqrt(1 + 8 * xpVal / 5) - 1) / 2) : null;
+                        fields.push(`<b>Level:</b> <span style='font-size:1.1em;color:#b0e0e6;'>${level != null && level >= 0 ? level : 'N/A'}</span>`);
+                    }
+                    if (opts.showXPPercent) fields.push(`<b>${jobName ? jobName : 'XP'}:</b> <span style=\"font-size:1.1em;color:#8cf0ff;\">${xpPercent.toFixed(2)}%</span>`);
+                    if (opts.showRawXP) fields.push(`<b>Raw XP:</b> <span style='font-size:1.1em;color:#ffb347;'>${xpVal != null && !isNaN(xpVal) ? xpVal.toLocaleString() : 'N/A'}</span>`);
+                    if (opts.showBonusXP) fields.push(`<b>Bonus XP Left:</b> <span style='font-size:1.1em;color:#ffd700;'>${bonusXP != null && !isNaN(bonusXP) ? Number(bonusXP).toLocaleString() : 'N/A'}</span>`);
+                    if (opts.showJob && jobName) fields.push(`<b>Job:</b> <span style='font-size:1.1em;color:#ffa07a;'>${jobName}</span>`);
                 }
-                if (opts.showXPPercent) fields.push(`<b>${jobName ? jobName : 'XP'}:</b> <span style=\"font-size:1.1em;color:#8cf0ff;\">${xpPercent.toFixed(2)}%</span>`);
-                if (opts.showRawXP) fields.push(`<b>Raw XP:</b> <span style='font-size:1.1em;color:#ffb347;'>${xpVal != null && !isNaN(xpVal) ? xpVal.toLocaleString() : 'N/A'}</span>`);
-                if (opts.showBonusXP) fields.push(`<b>Bonus XP Left:</b> <span style='font-size:1.1em;color:#ffd700;'>${bonusXP != null && !isNaN(bonusXP) ? Number(bonusXP).toLocaleString() : 'N/A'}</span>`);
-                if (opts.showJob && jobName) fields.push(`<b>Job:</b> <span style='font-size:1.1em;color:#ffa07a;'>${jobName}</span>`);
                 overlay.innerHTML = fields.join('<br>');
                 overlay.style.display = '';
                 setOverlayAlpha(slider.value);
