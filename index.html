@@ -44,6 +44,7 @@
             <label style="color:#fff;"><input type="checkbox" id="showRawXP"/> Raw XP</label>
             <label style="color:#fff;"><input type="checkbox" id="showBonusXP"/> Bonus XP</label>
             <label style="color:#fff;"><input type="checkbox" id="showJob"/> Job</label>
+            <label style="color:#fff;"><input type="checkbox" id="showXPPerHour"/> XP/hr</label>
         </div>
     </div>
     <script>
@@ -121,7 +122,8 @@
                 showRawXP: true,
                 showBonusXP: true,
                 showJob: true,
-                showLevel: true // New option for Level
+                showLevel: true, // New option for Level
+                showXPPerHour: true // New option for XP/hr
             };
             function getOverlayOptions() {
                 let opts = {};
@@ -141,10 +143,11 @@
                 document.getElementById('showRawXP').checked = !!opts.showRawXP;
                 document.getElementById('showBonusXP').checked = !!opts.showBonusXP;
                 document.getElementById('showJob').checked = !!opts.showJob;
-                document.getElementById('showLevel').checked = !!opts.showLevel; // New
+                document.getElementById('showLevel').checked = !!opts.showLevel;
+                document.getElementById('showXPPerHour').checked = !!opts.showXPPerHour;
             }
             function listenOverlayOptionsPanel() {
-                ['showWallet','showXPPercent','showRawXP','showBonusXP','showJob','showLevel'].forEach(id => {
+                ['showWallet','showXPPercent','showRawXP','showBonusXP','showJob','showLevel','showXPPerHour'].forEach(id => {
                     document.getElementById(id).addEventListener('change', function() {
                         const opts = getOverlayOptions();
                         opts[id] = this.checked;
@@ -224,6 +227,9 @@
                 if (xpVal == null && typeof truckingXP !== "undefined" && truckingXP !== null) {
                     xpVal = Number(truckingXP);
                 }
+                // --- XP per hour session tracking ---
+                updateXPSession(jobName, xpVal);
+                let xpPerHour = getXPPerHour(xpVal);
                 let xpPercent = xpVal != null && !isNaN(xpVal) ? (Math.max(0, Math.min(100, (xpVal / 1_000_000) * 100))) : 0;
                 let now = Date.now();
                 if (jobName !== lastXpJob || (lastXpPercent != null && xpPercent < lastXpPercent)) {
@@ -254,6 +260,20 @@
                     if (opts.showXPPercent) fields.push(`<b>${jobName ? jobName : 'XP'}:</b> <span style=\"font-size:1.1em;color:#8cf0ff;\">${xpPercent.toFixed(2)}%</span>`);
                     if (opts.showRawXP) fields.push(`<b>Raw XP:</b> <span style='font-size:1.1em;color:#ffb347;'>${xpVal != null && !isNaN(xpVal) ? xpVal.toLocaleString() : 'N/A'}</span>`);
                     if (opts.showBonusXP) fields.push(`<b>Bonus XP Left:</b> <span style='font-size:1.1em;color:#ffd700;'>${bonusXP != null && !isNaN(bonusXP) ? Number(bonusXP).toLocaleString() : 'N/A'}</span>`);
+                    // Only show XP/hr line if enabled
+                    if (opts.showXPPerHour) {
+                        let xpHrText = 'N/A';
+                        if (typeof xpVal === 'number' && xpSession.startXP != null && xpSession.startTime != null) {
+                            const elapsedMs = Date.now() - xpSession.startTime;
+                            const gained = xpVal - xpSession.startXP;
+                            if (elapsedMs >= 10000 && gained > 0 && !xpSession.paused) {
+                                xpHrText = `${Math.round(getXPPerHour(xpVal)).toLocaleString()}/hr`;
+                            } else if (elapsedMs >= 10000 && gained === 0 && !xpSession.paused) {
+                                xpHrText = '0/hr';
+                            }
+                        }
+                        fields.push(`<b>XP/hr:</b> <span style='font-size:1.1em;color:#90ee90;'>${xpHrText}</span>`);
+                    }
                     if (opts.showJob && jobName) fields.push(`<b>Job:</b> <span style='font-size:1.1em;color:#ffa07a;'>${jobName}</span>`);
                 }
                 overlay.innerHTML = fields.join('<br>');
@@ -610,6 +630,75 @@
                     window.parent.postMessage({type: 'pin'}, '*');
                 }
             });
+
+            // --- XP per hour tracking ---
+            let xpSession = {
+                job: null,
+                startXP: null,
+                startTime: null,
+                lastXP: null,
+                lastTime: null,
+                paused: false,
+                pauseTimeout: null,
+                // Add a buffer for moving average: array of {xp, time}
+                movingAvgBuffer: []
+            };
+            const XP_HOUR_PAUSE_MS = 5 * 60 * 1000; // 5 minutes inactivity pause
+            const XP_MOVING_AVG_WINDOW_MS = 5 * 60 * 1000; // 5 minutes window for moving average
+
+            function resetXPSession(job, xpVal) {
+                xpSession.job = job;
+                xpSession.startXP = xpVal;
+                xpSession.startTime = Date.now();
+                xpSession.lastXP = xpVal;
+                xpSession.lastTime = Date.now();
+                xpSession.paused = false;
+                if (xpSession.pauseTimeout) clearTimeout(xpSession.pauseTimeout);
+                xpSession.pauseTimeout = null;
+                // Reset moving average buffer
+                xpSession.movingAvgBuffer = [];
+                if (typeof xpVal === 'number') {
+                    xpSession.movingAvgBuffer.push({ xp: xpVal, time: Date.now() });
+                }
+            }
+            function updateXPSession(job, xpVal) {
+                if (job !== xpSession.job) {
+                    resetXPSession(job, xpVal);
+                } else if (typeof xpVal === 'number' && xpVal !== xpSession.lastXP) {
+                    xpSession.lastXP = xpVal;
+                    xpSession.lastTime = Date.now();
+                    if (xpSession.paused) {
+                        xpSession.paused = false;
+                        xpSession.startTime = Date.now();
+                        xpSession.startXP = xpVal;
+                        xpSession.movingAvgBuffer = [{ xp: xpVal, time: Date.now() }];
+                    }
+                }
+                // Add to moving average buffer if valid
+                if (typeof xpVal === 'number') {
+                    xpSession.movingAvgBuffer.push({ xp: xpVal, time: Date.now() });
+                    // Remove samples older than window
+                    const cutoff = Date.now() - XP_MOVING_AVG_WINDOW_MS;
+                    xpSession.movingAvgBuffer = xpSession.movingAvgBuffer.filter(s => s.time >= cutoff);
+                }
+                // Auto-pause if no XP gain for 5 minutes
+                if (xpSession.pauseTimeout) clearTimeout(xpSession.pauseTimeout);
+                xpSession.pauseTimeout = setTimeout(() => {
+                    xpSession.paused = true;
+                }, XP_HOUR_PAUSE_MS);
+            }
+            function getXPPerHour(xpVal) {
+                // Use moving average buffer if enough data
+                if (xpSession.paused || !Array.isArray(xpSession.movingAvgBuffer) || xpSession.movingAvgBuffer.length < 2) return null;
+                const buf = xpSession.movingAvgBuffer;
+                const oldest = buf[0];
+                const newest = buf[buf.length - 1];
+                const elapsedMs = newest.time - oldest.time;
+                const gained = newest.xp - oldest.xp;
+                if (elapsedMs < 10000 || gained <= 0) return null; // Require at least 10s and positive gain
+                const perHour = gained / (elapsedMs / 3600000);
+                return perHour;
+            }
         })();
     </script>
 </body>
