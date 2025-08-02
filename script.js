@@ -303,6 +303,25 @@ function toggleWindow(windowId) {
 document.getElementById('adblock-toggle').addEventListener('click', (event) => {
   isAdblockEnabled = !isAdblockEnabled;
   event.target.classList.toggle('active', isAdblockEnabled);
+  if (player && currentVideoId) {
+    const currentTime = player.getCurrentTime();
+    player.destroy();
+    player = new YT.Player('player', {
+        height: '100%',
+        width: '100%',
+        videoId: currentVideoId,
+        host: isAdblockEnabled ? 'https://www.youtube-nocookie.com' : 'https://www.youtube.com',
+        playerVars: {
+            'playsinline': 1,
+            'origin': window.location.origin,
+            'start': Math.floor(currentTime)
+        },
+        events: {
+            'onReady': onPlayerReady,
+            'onStateChange': onPlayerStateChange
+        }
+    });
+  }
 });
 
 document.getElementById('sponsorblock-toggle').addEventListener('click', (event) => {
