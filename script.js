@@ -300,14 +300,14 @@ function toggleWindow(windowId) {
   }
 }
 
-document.getElementById('adblock-toggle').addEventListener('click', () => {
+document.getElementById('adblock-toggle').addEventListener('click', (event) => {
   isAdblockEnabled = !isAdblockEnabled;
-  document.getElementById('adblock-toggle').style.backgroundColor = isAdblockEnabled ? 'green' : '#444';
+  event.target.classList.toggle('active', isAdblockEnabled);
 });
 
-document.getElementById('sponsorblock-toggle').addEventListener('click', () => {
+document.getElementById('sponsorblock-toggle').addEventListener('click', (event) => {
   isSponsorBlockEnabled = !isSponsorBlockEnabled;
-  document.getElementById('sponsorblock-toggle').style.backgroundColor = isSponsorBlockEnabled ? 'green' : '#444';
+  event.target.classList.toggle('active', isSponsorBlockEnabled);
   if (isSponsorBlockEnabled && currentVideoId) {
     fetchSponsorSegments(currentVideoId);
     checkSponsorSegments();
