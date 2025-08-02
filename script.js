@@ -119,69 +119,82 @@ function onYouTubeIframeAPIReady() {
 }
 
 document.getElementById('load-video').addEventListener('click', () => {
-  const url = document.getElementById('video-url').value.trim();
+  const urlOrId = document.getElementById('video-url').value.trim();
   const videoFrame = document.getElementById('video-frame');
   const playerDiv = document.getElementById('player');
 
-  if (url) {
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      const videoId = extractYouTubeVideoId(url);
-      if (videoId) {
-        playerDiv.style.display = 'block';
-        videoFrame.style.display = 'none';
-        currentVideoId = videoId;
-        if (player) {
-          player.loadVideoById(videoId);
-        } else {
-          player = new YT.Player('player', {
-            height: '100%',
-            width: '100%',
-            videoId: videoId,
-            playerVars: {
-              'playsinline': 1,
-              'origin': window.location.origin
-            },
-            events: {
-              'onReady': onPlayerReady,
-              'onStateChange': onPlayerStateChange
-            }
-          });
+  if (!urlOrId) {
+    return;
+  }
+
+  let videoId = extractYouTubeVideoId(urlOrId);
+  if (!videoId && /^[a-zA-Z0-9_-]{11}$/.test(urlOrId)) {
+    videoId = urlOrId;
+  }
+
+  if (videoId) {
+    playerDiv.style.display = 'block';
+    videoFrame.style.display = 'none';
+    videoFrame.src = ''; // Clear iframe src
+    currentVideoId = videoId;
+
+    if (player) {
+        player.destroy();
+    }
+
+    player = new YT.Player('player', {
+        height: '100%',
+        width: '100%',
+        videoId: videoId,
+        host: isAdblockEnabled ? 'https://www.youtube-nocookie.com' : 'https://www.youtube.com',
+        playerVars: {
+            'playsinline': 1,
+            'origin': window.location.origin,
+            'autoplay': 1
+        },
+        events: {
+            'onReady': onPlayerReady,
+            'onStateChange': onPlayerStateChange
         }
-      } else {
-        alert('Invalid YouTube URL.');
-      }
-    } else if (url.includes('twitch.tv')) {
-      const embedUrl = getTwitchEmbedUrl(url);
-      if (embedUrl) {
-        playerDiv.style.display = 'none';
-        videoFrame.style.display = 'block';
-        if(player) {
-          player.stopVideo();
-        }
-        videoFrame.src = embedUrl;
-      } else {
-        alert('Invalid Twitch URL.');
-      }
-    } else if (url.includes('kick.com')) {
-      const embedUrl = getKickEmbedUrl(url);
-      if (embedUrl) {
-        playerDiv.style.display = 'none';
-        videoFrame.style.display = 'block';
-        if(player) {
-          player.stopVideo();
-        }
-        videoFrame.src = embedUrl;
-      } else {
-        alert('Invalid Kick URL.');
-      }
-    } else {
+    });
+  } else if (urlOrId.includes('twitch.tv')) {
+    const embedUrl = getTwitchEmbedUrl(urlOrId);
+    if (embedUrl) {
       playerDiv.style.display = 'none';
       videoFrame.style.display = 'block';
-      if(player) {
-        player.stopVideo();
+      if (player) {
+        player.destroy();
+        player = null;
       }
-      videoFrame.src = url;
+      currentVideoId = null;
+      videoFrame.src = embedUrl;
+    } else {
+      alert('Invalid Twitch URL.');
     }
+  } else if (urlOrId.includes('kick.com')) {
+    const embedUrl = getKickEmbedUrl(urlOrId);
+    if (embedUrl) {
+      playerDiv.style.display = 'none';
+      videoFrame.style.display = 'block';
+      if (player) {
+        player.destroy();
+        player = null;
+      }
+      currentVideoId = null;
+      videoFrame.src = embedUrl;
+    } else {
+      alert('Invalid Kick URL.');
+    }
+  } else {
+    // Fallback for other URLs
+    playerDiv.style.display = 'none';
+    videoFrame.style.display = 'block';
+    if (player) {
+        player.destroy();
+        player = null;
+    }
+    currentVideoId = null;
+    videoFrame.src = urlOrId;
   }
 });
 
