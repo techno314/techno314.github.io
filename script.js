@@ -103,54 +103,139 @@ document.getElementById('add-10').addEventListener('click', () => {
 });
 
 // Video player functionality
+let player;
+let sponsorSegments = [];
+let currentVideoId = null;
+let isAdblockEnabled = false;
+let isSponsorBlockEnabled = false;
+
+const tag = document.createElement('script');
+tag.src = "https://www.youtube.com/iframe_api";
+const firstScriptTag = document.getElementsByTagName('script')[0];
+firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+function onYouTubeIframeAPIReady() {
+  // The API will call this function when it's ready.
+}
+
 document.getElementById('load-video').addEventListener('click', () => {
   const url = document.getElementById('video-url').value.trim();
   const videoFrame = document.getElementById('video-frame');
+  const playerDiv = document.getElementById('player');
 
   if (url) {
-    // Check for YouTube URLs
     if (url.includes('youtube.com') || url.includes('youtu.be')) {
       const videoId = extractYouTubeVideoId(url);
       if (videoId) {
-        videoFrame.src = `https://www.youtube.com/embed/${videoId}`;
+        playerDiv.style.display = 'block';
+        videoFrame.style.display = 'none';
+        currentVideoId = videoId;
+        if (player) {
+          player.loadVideoById(videoId);
+        } else {
+          player = new YT.Player('player', {
+            height: '100%',
+            width: '100%',
+            videoId: videoId,
+            playerVars: {
+              'playsinline': 1,
+              'origin': window.location.origin
+            },
+            events: {
+              'onReady': onPlayerReady,
+              'onStateChange': onPlayerStateChange
+            }
+          });
+        }
       } else {
-        alert('Invalid YouTube URL. Please enter a valid YouTube link.');
+        alert('Invalid YouTube URL.');
       }
-    }
-    // Check for Twitch URLs
-    else if (url.includes('twitch.tv')) {
+    } else if (url.includes('twitch.tv')) {
       const embedUrl = getTwitchEmbedUrl(url);
       if (embedUrl) {
+        playerDiv.style.display = 'none';
+        videoFrame.style.display = 'block';
+        if(player) {
+          player.stopVideo();
+        }
         videoFrame.src = embedUrl;
       } else {
-        alert('Invalid Twitch URL. Please enter a valid Twitch channel, video, or clip URL.');
+        alert('Invalid Twitch URL.');
       }
-    }
-    // Check for Kick URLs
-    else if (url.includes('kick.com')) {
+    } else if (url.includes('kick.com')) {
       const embedUrl = getKickEmbedUrl(url);
       if (embedUrl) {
+        playerDiv.style.display = 'none';
+        videoFrame.style.display = 'block';
+        if(player) {
+          player.stopVideo();
+        }
         videoFrame.src = embedUrl;
+      } else {
+        alert('Invalid Kick URL.');
       }
-      else {
-        alert('Invalid Kick URL. Please enter a valid Kick channel URL.');
+    } else {
+      playerDiv.style.display = 'none';
+      videoFrame.style.display = 'block';
+      if(player) {
+        player.stopVideo();
       }
-    }
-    // Handle other URLs
-    else {
       videoFrame.src = url;
     }
   }
 });
 
-// Function to extract YouTube video ID from URL
+function onPlayerReady(event) {
+  if (isSponsorBlockEnabled) {
+    fetchSponsorSegments(currentVideoId);
+  }
+}
+
+function onPlayerStateChange(event) {
+  if (event.data === YT.PlayerState.PLAYING && isSponsorBlockEnabled) {
+    checkSponsorSegments();
+  } else {
+    clearInterval(sponsorCheckInterval);
+  }
+}
+
+let sponsorCheckInterval;
+
+function checkSponsorSegments() {
+    clearInterval(sponsorCheckInterval);
+    sponsorCheckInterval = setInterval(() => {
+        if (player && player.getPlayerState() === YT.PlayerState.PLAYING) {
+            const currentTime = player.getCurrentTime();
+            for (const segment of sponsorSegments) {
+                if (currentTime >= segment.segment[0] && currentTime < segment.segment[1]) {
+                    player.seekTo(segment.segment[1]);
+                }
+            }
+        }
+    }, 500);
+}
+
+async function fetchSponsorSegments(videoId) {
+  if (!videoId) return;
+  try {
+    const response = await fetch(`https://sponsor.ajay.app/api/skipSegments?videoID=${videoId}`);
+    if (response.ok) {
+      sponsorSegments = await response.json();
+    } else {
+      sponsorSegments = [];
+    }
+  } catch (error) {
+    console.error('Error fetching sponsor segments:', error);
+    sponsorSegments = [];
+  }
+}
+
 function extractYouTubeVideoId(url) {
-  const regex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  const regex = /(?:youtube\.com\/(?:[^/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
   const match = url.match(regex);
   return match ? match[1] : null;
 }
 
-// Function to handle Twitch URLs
 function getTwitchEmbedUrl(url) {
   try {
     const parsedUrl = new URL(url);
@@ -170,7 +255,6 @@ function getTwitchEmbedUrl(url) {
       return null;
     }
 
-    // Use the current hostname for the parent parameter
     const parentHost = window.location.hostname || 'localhost';
     return `https://player.twitch.tv/?${type}=${encodeURIComponent(id)}&parent=${parentHost}`;
   } catch (e) {
@@ -178,7 +262,6 @@ function getTwitchEmbedUrl(url) {
   }
 }
 
-// Function to handle Kick URLs
 function getKickEmbedUrl(url) {
   try {
     const parsedUrl = new URL(url);
@@ -195,7 +278,6 @@ function getKickEmbedUrl(url) {
   }
 }
 
-// Global settings functionality
 const settingsButton = document.getElementById('settings-button');
 const settingsPanel = document.getElementById('global-settings');
 
@@ -212,13 +294,29 @@ function setGlobalOpacity(opacity) {
 function toggleWindow(windowId) {
   const window = document.querySelector(`.${windowId}`);
   if (window.style.display === 'none' || window.style.display === '') {
-    window.style.display = 'block'; // Show the window
+    window.style.display = 'block';
   } else {
-    window.style.display = 'none'; // Hide the window
+    window.style.display = 'none';
   }
 }
 
-// Watching Mode functionality
+document.getElementById('adblock-toggle').addEventListener('click', () => {
+  isAdblockEnabled = !isAdblockEnabled;
+  document.getElementById('adblock-toggle').style.backgroundColor = isAdblockEnabled ? 'green' : '#444';
+});
+
+document.getElementById('sponsorblock-toggle').addEventListener('click', () => {
+  isSponsorBlockEnabled = !isSponsorBlockEnabled;
+  document.getElementById('sponsorblock-toggle').style.backgroundColor = isSponsorBlockEnabled ? 'green' : '#444';
+  if (isSponsorBlockEnabled && currentVideoId) {
+    fetchSponsorSegments(currentVideoId);
+    checkSponsorSegments();
+  } else {
+    clearInterval(sponsorCheckInterval);
+    sponsorSegments = [];
+  }
+});
+
 let isWatchingMode = false;
 let watchModeClicks = 0;
 let watchModeTimer = null;
@@ -238,19 +336,17 @@ function toggleWatchingMode() {
     watchToggleButton.textContent = 'Watching Mode';
   }
 
-  // Track clicks for Super Secret Button
   watchModeClicks++;
   if (watchModeClicks === 2) {
-    superSecretButton.style.display = 'block'; // Show the Super Secret Button
-    watchModeClicks = 0; // Reset click counter
-    if (watchModeTimer) clearTimeout(watchModeTimer); // Reset the timer
+    superSecretButton.style.display = 'block';
+    watchModeClicks = 0;
+    if (watchModeTimer) clearTimeout(watchModeTimer);
     watchModeTimer = setTimeout(() => {
-      superSecretButton.style.display = 'none'; // Hide the button after 500 seconds
-    }, 500000); // 500 seconds
+      superSecretButton.style.display = 'none';
+    }, 500000);
   }
 }
 
-// Super Secret Button functionality
 function openSecretWindow() {
   const secretWindow = document.createElement('div');
   secretWindow.className = 'window secret-window';
@@ -265,8 +361,7 @@ function openSecretWindow() {
 
   document.body.appendChild(secretWindow);
 
-  // Remove the secret window after 9 seconds
   setTimeout(() => {
     secretWindow.remove();
-  }, 9000); // 9 seconds
+  }, 9000);
 }

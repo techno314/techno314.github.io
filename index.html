@@ -304,7 +304,8 @@
         <input type="text" id="video-url" placeholder="Enter YouTube, Twitch, or Kick URL">
         <button id="load-video">▶️</button>
       </div>
-      <iframe id="video-frame" src="" allowfullscreen></iframe>
+      <div id="player"></div>
+      <iframe id="video-frame" src="" allowfullscreen style="display:none;"></iframe>
     </div>
   </div>
 
@@ -318,6 +319,8 @@
       <button onclick="toggleWindow('timer-window')">Toggle Timer</button>
       <button onclick="toggleWindow('video-window')">Toggle Video</button>
       <button id="watch-toggle" onclick="toggleWatchingMode()">Watching Mode</button>
+      <button id="adblock-toggle">Toggle Adblock</button>
+      <button id="sponsorblock-toggle">Toggle SponsorBlock</button>
       <button id="super-secret-button" style="display: none;" onclick="openSecretWindow()">Super Secret Button</button>
     </div>
   </div>
