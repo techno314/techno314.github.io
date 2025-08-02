@@ -210,7 +210,7 @@
 
 
         let pinEnabled = localStorage.getItem('data-viewer-pinEnabled') === 'true';
-        let isPaused = false;
+        let isPaused = true;
 
         // Initial message to indicate app started
         const initialMessage = document.createElement('div');
@@ -422,6 +422,13 @@
 
         // Initial update of the pin button state
         updatePinButton();
+
+        // Set initial paused state
+        if (isPaused) {
+            pauseButton.textContent = 'Resume Log';
+            logContainer.classList.add('paused');
+            addLogEntry('System', undefined, 'Log Paused.', true);
+        }
 
         // Handle ESC key to pin/unpin (or send 'pin' command)
         window.addEventListener("keydown", (e) => {
