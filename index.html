@@ -1,335 +1,101 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Player & Other</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background: transparent;
-      font-family: Arial, sans-serif;
-      color: #fff;
-      overflow: hidden;
-    }
-
-    .window {
-      position: absolute;
-      background: rgba(30, 30, 30, 0.9);
-      border: 1px solid #444;
-      border-radius: 8px;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-      overflow: hidden;
-      resize: both;
-      min-width: 200px;
-      min-height: 150px;
-    }
-
-    .window-header {
-      padding: 8px;
-      background: rgba(20, 20, 20, 0.9);
-      border-bottom: 1px solid #444;
-      cursor: move;
-      user-select: none;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .window-content {
-      padding: 10px;
-      height: calc(100% - 40px);
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .notes-window {
-      width: 300px;
-      height: 250px;
-      top: 20px;
-      left: 20px;
-      display: none;
-    }
-
-    .timer-window {
-      width: 250px;
-      height: 200px;
-      top: 20px;
-      left: 340px;
-      display: none;
-    }
-
-    .video-window {
-      width: 400px;
-      height: 300px;
-      top: 20px;
-      left: 610px;
-    }
-
-    textarea {
-      width: 100%;
-      height: 100%;
-      background: transparent;
-      border: none;
-      color: #fff;
-      resize: none;
-      outline: none;
-    }
-
-    .timer-controls {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      align-items: center;
-      width: 100%;
-    }
-
-    .timer-controls .top-buttons {
-      display: flex;
-      gap: 5px;
-    }
-
-    .timer-controls .bottom-buttons {
-      display: flex;
-      gap: 5px;
-    }
-
-    .timer-controls button {
-      background: #444;
-      border: none;
-      color: #fff;
-      padding: 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      flex: 1 1 auto;
-    }
-
-    .timer-controls button:hover {
-      background: #555;
-    }
-
-    .timer-display {
-      font-size: 24px;
-      margin: 10px 0;
-      text-align: center;
-      font-weight: bold;
-      color: white;
-    }
-
-    .timer-display.rainbow {
-      animation: rainbow-wave 1s linear infinite;
-    }
-
-    @keyframes rainbow-wave {
-      0% { color: red; }
-      14% { color: orange; }
-      28% { color: yellow; }
-      42% { color: green; }
-      57% { color: blue; }
-      71% { color: indigo; }
-      85% { color: violet; }
-      100% { color: red; }
-    }
-
-    iframe {
-      width: 100%;
-      height: calc(100% - 40px);
-      border: none;
-      background: transparent;
-    }
-
-    .global-controls {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-
-    .global-controls button {
-      background: #444;
-      border: none;
-      color: #fff;
-      padding: 8px;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-
-    .global-controls button:hover {
-      background: #555;
-    }
-
-    #start-timer {
-      background: green;
-      opacity: 1;
-    }
-
-    #stop-timer {
-      background: red;
-      opacity: 1;
-    }
-
-    .settings-panel {
-      display: none;
-      position: absolute;
-      top: 40px;
-      right: 10px;
-      background: rgba(30, 30, 30, 0.9);
-      padding: 10px;
-      border-radius: 8px;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-    }
-
-    .settings-panel label {
-      display: block;
-      margin-bottom: 5px;
-    }
-
-    .settings-panel input[type="range"] {
-      width: 100%;
-    }
-
-    @keyframes flash {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0; }
-    }
-
-    .video-controls {
-      display: flex;
-      gap: 5px;
-      width: 100%;
-      align-items: center;
-    }
-
-    .video-controls input {
-      flex: 1;
-      padding: 8px;
-      border: none;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.1);
-      color: #fff;
-    }
-
-    .video-controls button {
-      background: #444;
-      border: none;
-      color: #fff;
-      padding: 8px;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-
-    .video-controls button:hover {
-      background: #555;
-    }
-
-    .settings-panel button.active {
-      background-color: green;
-      border: 1px solid #0f0;
-    }
-
-    /* New CSS for Watching Mode */
-    .watching-mode .window-header,
-    .watching-mode .video-controls {
-      display: none;
-    }
-
-    .watching-mode .window-content {
-      padding: 0;
-      height: 100%;
-    }
-
-    .watching-mode iframe {
-      height: 100%;
-    }
-
-    /* Super Secret Window Styles */
-    .secret-window {
-      width: 800px; /* 200% larger */
-      height: 600px; /* 200% larger */
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%); /* Center the window */
-      position: fixed;
-      z-index: 1000;
-    }
-
-    .secret-window iframe {
-      width: 100%;
-      height: 100%;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Money Tracker</title>
+            <link rel="stylesheet" href="tracker.css?v=1">
 </head>
-<body>
-  <!-- Notes Window -->
-  <div class="window notes-window">
-    <div class="window-header">
-      <span>Notes</span>
-    </div>
-    <div class="window-content">
-      <textarea placeholder="Type your notes here..."></textarea>
-    </div>
-  </div>
+<body style="-webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;">
+    <div id="moneyTrackerContainer">
+        <div class="connection-status" id="connectionStatus">Disconnected</div>
+        
+        <header>
+            <h1>💰 Money Tracker</h1>
+        </header>
 
-  <!-- Timer Window -->
-  <div class="window timer-window">
-    <div class="window-header">
-      <span>Stop Timer</span>
-    </div>
-    <div class="window-content">
-      <div class="timer-controls">
-        <div class="top-buttons">
-          <button id="add-1">+1</button>
-          <button id="add-5">+5</button>
-          <button id="add-10">+10</button>
+        <button id="pinToggleBtn">Pin Panel: Off</button>
+
+        <div class="content">
+            <!-- Compact mode content -->
+            <div class="compact-content">
+                <div class="compact-wallet">
+                    <h3>Wallet</h3>
+                    <div class="wallet-amount" id="compactWallet">$0</div>
+                </div>
+                
+                <div class="compact-stats">
+                    <div class="compact-stat">
+                        <div class="compact-stat-label">Made</div>
+                        <div class="compact-stat-value" id="compactMoneyMade">$0</div>
+                    </div>
+                    <div class="compact-stat">
+                        <div class="compact-stat-label">Rate</div>
+                        <div class="compact-stat-value" id="compactRate">$0/hr</div>
+                    </div>
+                </div>
+                
+                <div class="compact-tracking">
+                    <div class="compact-status status-inactive" id="compactStatus">
+                        <div class="compact-status-dot"></div>
+                    </div>
+                    <div class="compact-stat-label">Tracking</div>
+                    <div class="compact-time-tracked" id="compactTimeTracked">00:00:00</div>
+                </div>
+            </div>
+
+            <!-- Normal mode content -->
+            <div class="normal-content">
+                <div class="current-wallet">
+                    <h3>Current Wallet Balance</h3>
+                    <div class="wallet-amount" id="currentWallet">$0</div>
+                </div>
+
+                <div class="status-section">
+                    <div class="status-indicator" id="trackingStatus">
+                        <span class="status-dot"></span>
+                        <span>Tracking Inactive</span>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Money Made</h3>
+                        <div class="stat-value money-value" id="moneyMade">$0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time Tracked</h3>
+                        <div class="stat-value time-value" id="timeTracked">00:00:00</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Per Hour</h3>
+                        <div class="stat-value rate-value" id="moneyPerHour">$0/hr</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Per Minute</h3>
+                        <div class="stat-value rate-value" id="moneyPerMinute">$0/min</div>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button class="btn btn-success" id="startTrackingBtn">Start Tracking</button>
+                    <button class="btn btn-danger" id="stopTrackingBtn" disabled>Stop Tracking</button>
+                    <button class="btn btn-primary" id="resetBtn">Reset</button>
+                </div>
+
+                <div class="log-section">
+                    <h4>Activity Log</h4>
+                    <div id="activityLog">
+                        <div class="log-entry">
+                            <span class="timestamp">[--:--:--]</span>
+                            <span class="message">Waiting for game data...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="timer-display" id="timer-display">00:00:00</div>
-        <div class="bottom-buttons">
-          <button id="start-timer">Start</button>
-          <button id="pause-timer">Pause</button>
-          <button id="stop-timer">Stop</button>
-          <button id="reset-timer">Reset</button>
-        </div>
-      </div>
     </div>
-  </div>
 
-  <!-- Video Window -->
-  <div class="window video-window">
-    <div class="window-header">
-      <span>Video Player</span>
-    </div>
-    <div class="window-content">
-      <div class="video-controls">
-        <input type="text" id="video-url" placeholder="Enter YouTube, Twitch, or Kick URL">
-        <button id="load-video">▶️</button>
-      </div>
-      <div id="player"></div>
-      <iframe id="video-frame" src="" allowfullscreen style="display:none;"></iframe>
-    </div>
-  </div>
-
-  <!-- Global Controls -->
-  <div class="global-controls">
-    <button id="settings-button">⚙️</button>
-    <div class="settings-panel" id="global-settings">
-      <label for="global-opacity">Transparency:</label>
-      <input type="range" id="global-opacity" min="0" max="1" step="0.1" value="0.9" oninput="setGlobalOpacity(this.value)">
-      <button onclick="toggleWindow('notes-window')">Toggle Notes</button>
-      <button onclick="toggleWindow('timer-window')">Toggle Timer</button>
-      <button onclick="toggleWindow('video-window')">Toggle Video</button>
-      <button id="watch-toggle" onclick="toggleWatchingMode()">Watching Mode</button>
-      <button id="adblock-toggle">Toggle Adblock</button>
-      <button id="sponsorblock-toggle">Toggle SponsorBlock</button>
-      <button id="super-secret-button" style="display: none;" onclick="openSecretWindow()">Super Secret Button</button>
-    </div>
-  </div>
-
-  <script src="script.js" defer></script>
+    <script src="tracker.js?v=3"></script>
 </body>
 </html>
