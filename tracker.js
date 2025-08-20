@@ -387,7 +387,6 @@
             requestGameData() {
                 // Send command to request initial data
                 sendCommand({ type: 'getData' });
-                
             }
         }
 
@@ -501,11 +500,6 @@
                 if (resizeTimeout) clearTimeout(resizeTimeout);
                 resizeTimeout = setTimeout(() => {
                     for (let entry of entries) {
-                        // Don't save size changes in compact mode
-                        if (moneyTrackerContainer.classList.contains('compact-mode')) {
-                            return;
-                        }
-                        
                         let width = moneyTrackerContainer.offsetWidth;
                         let height = moneyTrackerContainer.offsetHeight;
                         const minWidth = parseInt(window.getComputedStyle(moneyTrackerContainer).minWidth) || 400;

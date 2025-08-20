@@ -72,8 +72,12 @@
             height: 120px !important;
             min-width: 280px !important;
             min-height: 120px !important;
-            resize: none;
             background: var(--container-bg);
+        }
+
+        #moneyTrackerContainer {
+            resize: both;
+            overflow: auto; /* Ensure scrollbars appear if content overflows during resize */
         }
 
         /* Responsive adjustments for very small sizes */
