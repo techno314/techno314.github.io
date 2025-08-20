@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Money Tracker Preview</title>
+            <link rel="stylesheet" href="tracker.css?v=1">
+</head>
+<body style="-webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;">
+    <div id="moneyTrackerContainer">
+        <div class="connection-status" id="connectionStatus">Disconnected</div>
+        
+        <header>
+            <h1>💰 Money Tracker</h1>
+        </header>
+
+        <button id="pinToggleBtn">Pin Panel: Off</button>
+
+        <div class="content">
+            <!-- Compact mode content -->
+            <div class="compact-content">
+                <div class="compact-wallet">
+                    <h3>Wallet</h3>
+                    <div class="wallet-amount" id="compactWallet">$0</div>
+                </div>
+                
+                <div class="compact-stats">
+                    <div class="compact-stat">
+                        <div class="compact-stat-label">Made</div>
+                        <div class="compact-stat-value" id="compactMoneyMade">$0</div>
+                    </div>
+                    <div class="compact-stat">
+                        <div class="compact-stat-label">Rate</div>
+                        <div class="compact-stat-value" id="compactRate">$0/hr</div>
+                    </div>
+                </div>
+                
+                <div class="compact-tracking">
+                    <div class="compact-status status-inactive" id="compactStatus">
+                        <div class="compact-status-dot"></div>
+                    </div>
+                    <div class="compact-stat-label">Tracking</div>
+                    <div class="compact-time-tracked" id="compactTimeTracked">00:00:00</div>
+                </div>
+            </div>
+
+            <!-- Normal mode content -->
+            <div class="normal-content">
+                <div class="current-wallet">
+                    <h3>Current Wallet Balance</h3>
+                    <div class="wallet-amount" id="currentWallet">$0</div>
+                </div>
+
+                <div class="status-section">
+                    <div class="status-indicator" id="trackingStatus">
+                        <span class="status-dot"></span>
+                        <span>Tracking Inactive</span>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Money Made</h3>
+                        <div class="stat-value money-value" id="moneyMade">$0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time Tracked</h3>
+                        <div class="stat-value time-value" id="timeTracked">00:00:00</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Per Hour</h3>
+                        <div class="stat-value rate-value" id="moneyPerHour">$0/hr</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Per Minute</h3>
+                        <div class="stat-value rate-value" id="moneyPerMinute">$0/min</div>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button class="btn btn-success" id="startTrackingBtn">Start Tracking</button>
+                    <button class="btn btn-danger" id="stopTrackingBtn" disabled>Stop Tracking</button>
+                    <button class="btn btn-primary" id="resetBtn">Reset</button>
+                </div>
+
+                <div class="log-section">
+                    <h4>Activity Log</h4>
+                    <div id="activityLog">
+                        <div class="log-entry">
+                            <span class="timestamp">[--:--:--]</span>
+                            <span class="message">Waiting for game data...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="tracker.js?v=1"></script>
+</body>
+</html>
