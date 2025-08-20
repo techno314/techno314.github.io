@@ -228,7 +228,6 @@
                 this.isTracking = false;
                 this.sessionStartTime = null;
                 this.sessionStartingWallet = 0;
-                this.currentWallet = 0; // Reset current wallet as well
                 this.totalMoneyMade = 0; // Reset total money made
                 this.totalTimeTrackedMs = 0; // Reset total time tracked
 
