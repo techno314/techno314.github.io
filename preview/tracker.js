@@ -62,7 +62,7 @@
                 // Save state periodically
                 setInterval(() => {
                     this.saveState();
-                }, 5000); // Save every 5 seconds
+                }, 1000); // Save every 1 seconds
             }
 
             saveState() {
