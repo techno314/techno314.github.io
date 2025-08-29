@@ -82,24 +82,33 @@
             }
 
             loadState() {
-                // Always default to tracking being stopped on load
-                this.isTracking = false; 
+                const wasTracking = localStorage.getItem(LOCAL_STORAGE_IS_TRACKING_KEY) === 'true';
+
                 // Load accumulated data
                 this.totalMoneyMade = parseFloat(localStorage.getItem(LOCAL_STORAGE_TOTAL_MONEY_MADE_KEY) || '0');
                 this.totalTimeTrackedMs = parseFloat(localStorage.getItem(LOCAL_STORAGE_TOTAL_TIME_TRACKED_MS_KEY) || '0');
                 this.currentWallet = parseFloat(localStorage.getItem(LOCAL_STORAGE_CURRENT_WALLET_KEY) || '0');
 
-                // Session-specific data is NOT loaded here, it's set when tracking starts
-                this.sessionStartTime = null;
-                this.sessionStartingWallet = 0;
+                if (wasTracking) {
+                    this.isTracking = true;
+                    const startTimeString = localStorage.getItem(LOCAL_STORAGE_START_TIME_KEY);
+                    this.sessionStartTime = startTimeString ? new Date(startTimeString) : new Date();
+                    this.sessionStartingWallet = parseFloat(localStorage.getItem(LOCAL_STORAGE_STARTING_WALLET_KEY) || this.currentWallet.toString());
+
+                    this.elements.startBtn.disabled = true;
+                    this.elements.stopBtn.disabled = false;
+                } else {
+                    this.isTracking = false;
+                    this.sessionStartTime = null;
+                    this.sessionStartingWallet = 0;
+
+                    this.elements.startBtn.disabled = false;
+                    this.elements.stopBtn.disabled = true;
+                }
 
                 // Update UI based on loaded state
                 this.updateDisplay();
                 this.updateTrackingStatus();
-
-                // Adjust button states to reflect tracking being stopped
-                this.elements.startBtn.disabled = false;
-                this.elements.stopBtn.disabled = true;
             }
 
             initializeElements() {
