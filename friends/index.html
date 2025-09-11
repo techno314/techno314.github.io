@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Friends System</title>
+  <script>
+    const timestamp = Date.now();
+    document.write('<link rel="stylesheet" href="style.css?v=' + timestamp + '">');
+  </script>
+</head>
+<body>
+  <div class="friends-container">
+    <div class="header">
+      <div class="title">Friends System</div>
+      <button id="soundToggle" onclick="toggleSound()" style="position: absolute; right: 10px; top: 10px; background: none; border: none; font-size: 1.2rem; cursor: pointer;">🔊</button>
+    </div>
+    
+    <div class="user-section">
+      <div class="section-title">Your User ID</div>
+      <div id="userStatus">Waiting for game data...</div>
+    </div>
+    
+    <div class="user-section">
+      <div class="section-title">Send Friend Request</div>
+      <input type="text" id="targetUser" placeholder="Friend's User ID" class="friend-input">
+      <button onclick="sendFriendRequest()" class="send-inline">Send</button>
+      <div id="sendStatus"></div>
+    </div>
+    
+    <div class="user-section">
+      <div class="section-title">Friend Requests</div>
+      <div id="requestsList"></div>
+    </div>
+    
+    <div class="user-section">
+      <div class="section-title">Location Requests</div>
+      <div id="locationRequestsList"></div>
+    </div>
+    
+    <div class="user-section">
+      <div class="section-title">Active Friends</div>
+      <button onclick="toggleFriendsWindow()" style="width: 100%; margin-bottom: 0.5rem;">Toggle Friends Window</button>
+      <input type="text" id="removeFriendId" placeholder="Friend's User ID" class="friend-input">
+      <button onclick="removeFriendById()" class="send-inline" style="background: #f44336;">Remove</button>
+      <div id="removeStatus"></div>
+    </div>
+    
+    <div class="user-section">
+      <div class="section-title">Block/Unblock User</div>
+      <input type="text" id="blockUserId" placeholder="User ID" class="friend-input">
+      <button onclick="blockUser()" class="send-inline" style="background: #f44336;">Block</button>
+      <button onclick="unblockUser()" class="send-inline" style="background: #43a047;">Unblock</button>
+      <div id="blockStatus"></div>
+    </div>
+  </div>
+
+  <div id="friendsWindow"></div>
+
+  <script>
+    const jsTimestamp = Date.now();
+    document.write('<script src="script.js?v=' + jsTimestamp + '"><\/script>');
+  </script>
+</body>
+</html>
