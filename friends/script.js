@@ -39,6 +39,14 @@ async function toggleLocationRequest(friendId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ requester_id: currentUserId, target_id: friendId, active: !isActive })
     });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('Server error:', response.status, text);
+      showNotification('Server error: ' + response.status, 'error');
+      return;
+    }
+    
     const result = await response.json();
     
     if (result.success) {
@@ -55,14 +63,16 @@ async function toggleLocationRequest(friendId) {
     }
   } catch (error) {
     console.error('Error toggling location request:', error);
+    showNotification('Connection error', 'error');
   }
 }
 
 let activeLocationSharing = new Set();
+let acceptedLocationRequests = new Set();
 
 function startLocationSharing() {
   setInterval(async () => {
-    if (currentUserId && activeLocationSharing.size > 0) {
+    if (currentUserId && acceptedLocationRequests.size > 0) {
       // Request current location from game
       if (window.parent && window.parent !== window) {
         window.parent.postMessage({ 
@@ -500,9 +510,9 @@ window.addEventListener('message', (event) => {
       window.pendingLocationShare = null;
     }
     
-    // Handle automatic location sharing for active requests
-    if (window.pendingAutoShare && activeLocationSharing.size > 0) {
-      activeLocationSharing.forEach(requesterId => {
+    // Handle automatic location sharing for accepted requests
+    if (window.pendingAutoShare && acceptedLocationRequests.size > 0) {
+      acceptedLocationRequests.forEach(requesterId => {
         shareLocationData(locationData, requesterId);
       });
       window.pendingAutoShare = false;
@@ -527,13 +537,6 @@ async function refreshLocationRequests() {
     const response = await fetch(API_BASE + '/location/requests/' + currentUserId);
     const result = await response.json();
     
-    // Update active location sharing set
-    const newActiveSharing = new Set();
-    if (result.requests) {
-      result.requests.forEach(req => newActiveSharing.add(req.requester_id));
-    }
-    activeLocationSharing = newActiveSharing;
-    
     const locationRequestsList = document.getElementById('locationRequestsList');
     if (result.requests && result.requests.length > 0) {
       if (result.requests.length > lastLocationRequestCount && lastLocationRequestCount >= 0) {
@@ -542,7 +545,11 @@ async function refreshLocationRequests() {
       lastLocationRequestCount = result.requests.length;
       
       locationRequestsList.innerHTML = result.requests.map(req => {
-        return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • Active tracking</div></div><div><button onclick="declineLocationRequest(' + req.requester_id + ')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">Stop</button></div></div>';
+        const isAccepted = acceptedLocationRequests.has(req.requester_id);
+        const buttonText = isAccepted ? 'Stop' : 'Accept';
+        const buttonColor = isAccepted ? '#f44336' : '#43a047';
+        const buttonAction = isAccepted ? 'declineLocationRequest(' + req.requester_id + ')' : 'acceptLocationRequest(' + req.requester_id + ')';
+        return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • ' + (isAccepted ? 'Sharing location' : 'Pending acceptance') + '</div></div><div><button onclick="' + buttonAction + '" style="background: ' + buttonColor + '; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">' + buttonText + '</button></div></div>';
       }).join('');
     } else {
       if (lastLocationRequestCount === -1) lastLocationRequestCount = 0;
@@ -552,6 +559,12 @@ async function refreshLocationRequests() {
   } catch (error) {
     document.getElementById('locationRequestsList').innerHTML = '<div style="text-align: center; color: #f44336; font-size: 0.8rem;">Error loading requests</div>';
   }
+}
+
+async function acceptLocationRequest(requesterId) {
+  acceptedLocationRequests.add(requesterId);
+  refreshLocationRequests();
+  showNotification('Location sharing started', 'success');
 }
 
 async function declineLocationRequest(requesterId) {
@@ -564,6 +577,7 @@ async function declineLocationRequest(requesterId) {
     const result = await response.json();
     
     if (result.success) {
+      acceptedLocationRequests.delete(requesterId);
       refreshLocationRequests();
       showNotification('Location tracking stopped', 'info');
     }
