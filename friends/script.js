@@ -41,11 +41,14 @@ async function toggleLocationRequest(friendId) {
   const hasRequest = activeLocationRequests.has(friendId);
   const isActiveTracking = activeLocationTracking.has(friendId);
   
-  // If there's a pending request (orange state) but not active, don't allow action
+  // Only block if there's a pending request (orange state) - allow if active (green) or no request (blue)
   if (hasRequest && !isActiveTracking) {
     showNotification('Location request already pending', 'info');
     return;
   }
+  
+  // If actively tracking (green state), allow stopping
+  // If no request (blue state), allow starting
   
   // Add cooldown
   toggleCooldown.add(friendId);
@@ -55,7 +58,7 @@ async function toggleLocationRequest(friendId) {
     const response = await fetch(API_BASE + '/location/toggle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requester_id: currentUserId, target_id: friendId, active: !hasRequest })
+      body: JSON.stringify({ requester_id: currentUserId, target_id: friendId, active: !(hasRequest || isActiveTracking) })
     });
     
     if (!response.ok) {
