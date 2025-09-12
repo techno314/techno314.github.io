@@ -107,6 +107,7 @@ function initializeWebSocket() {
   socket.on('location_request_cancelled', (data) => {
     devLog('[WebSocket] Location request cancelled:', data);
     refreshLocationRequests();
+    updateLocationTrackingStatus();
   });
   
   socket.on('location_request_accepted', (data) => {
