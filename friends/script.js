@@ -340,9 +340,10 @@ function updateFriendsWindow() {
     const sessionDuration = getConnectedSeconds(friend);
     const timeStr = formatSeconds(sessionDuration);
     const betaIndicator = friend.server === 'njyvop' ? ' [BETA]' : '';
-    const isTracking = activeLocationRequests.has(friend.friend_id);
-    const buttonStyle = isTracking ? 'background: #43a047; color: white;' : 'background: #5865f2; color: white;';
-    const buttonText = isTracking ? '📍✓' : '📍';
+    const hasRequest = activeLocationRequests.has(friend.friend_id);
+    const isActive = activeLocationTracking.has(friend.friend_id);
+    const buttonStyle = isActive ? 'background: #43a047; color: white;' : (hasRequest ? 'background: #ffa500; color: white;' : 'background: #5865f2; color: white;');
+    const buttonText = isActive ? '📍✓' : (hasRequest ? '📍⏳' : '📍');
     return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span>' + friend.name + ' (ID: ' + friend.friend_id + ')' + betaIndicator + ' (' + timeStr + ')</span><button onclick="toggleLocationRequest(' + friend.friend_id + ')" style="' + buttonStyle + ' border: none; border-radius: 3px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer;">' + buttonText + '</button></div>';
   }).join('');
   
@@ -624,6 +625,8 @@ async function declineLocationRequest(requesterId) {
   }
 }
 
+let activeLocationTracking = new Set();
+
 async function syncActiveLocationRequests() {
   if (!currentUserId) return;
   
@@ -631,11 +634,15 @@ async function syncActiveLocationRequests() {
     const response = await fetch(API_BASE + '/location/sent/' + currentUserId);
     const result = await response.json();
     
-    // Get all requests (pending and active) where current user is the requester
+    // Get all requests where current user is the requester
     const serverRequestTargets = new Set();
+    const serverActiveTargets = new Set();
     if (result.requests) {
       result.requests.forEach(req => {
         serverRequestTargets.add(req.target_id);
+        if (req.status === 'active') {
+          serverActiveTargets.add(req.target_id);
+        }
       });
     }
     
@@ -655,6 +662,12 @@ async function syncActiveLocationRequests() {
       if (!activeLocationRequests.has(friendId)) {
         toAdd.push(friendId);
       }
+    });
+    
+    // Update active tracking set
+    activeLocationTracking.clear();
+    serverActiveTargets.forEach(friendId => {
+      activeLocationTracking.add(friendId);
     });
     
     toRemove.forEach(friendId => {
