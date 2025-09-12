@@ -28,26 +28,7 @@ function toggleSound() {
   document.getElementById('soundToggle').textContent = soundEnabled ? '🔊' : '🔇';
 }
 
-async function requestLocation(friendId) {
-  if (!currentUserId) return;
-  
-  try {
-    const response = await fetch(API_BASE + '/location/request', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requester_id: currentUserId, target_id: friendId })
-    });
-    const result = await response.json();
-    
-    if (result.success) {
-      showNotification('Location request sent to ' + friendId, 'success');
-    } else {
-      showNotification(result.error, 'error');
-    }
-  } catch (error) {
-    console.error('Error requesting location:', error);
-  }
-}
+
 
 let activeLocationSharing = new Set();
 
