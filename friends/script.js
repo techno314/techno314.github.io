@@ -209,6 +209,7 @@ let lastUpdateTime = Math.floor(Date.now() / 1000);
 let cached_players = [];
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
 let previousOnlineFriends = new Set();
+let activeLocationRequests = new Set();
 
 function formatSeconds(seconds) {
   const hrs = Math.floor(seconds / 3600);
