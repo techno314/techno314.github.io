@@ -52,7 +52,7 @@ async function toggleLocationRequest(friendId) {
     if (result.success) {
       if (!isActive) {
         activeLocationRequests.add(friendId);
-        showNotification('Location tracking started for ' + friendId, 'success');
+        showNotification('Location request sent to ' + friendId, 'success');
       } else {
         activeLocationRequests.delete(friendId);
         showNotification('Location tracking stopped for ' + friendId, 'info');
@@ -98,9 +98,7 @@ function shareLocationData(locationData, requesterId) {
     })
   }).then(response => response.json())
   .then(result => {
-    if (result.success) {
-      showNotification('Location shared successfully', 'success');
-    }
+    // No notification needed - waypoint notification handles this
   }).catch(error => {
     console.error('Error sharing location:', error);
   });
@@ -626,12 +624,63 @@ async function declineLocationRequest(requesterId) {
   }
 }
 
+async function syncActiveLocationRequests() {
+  if (!currentUserId) return;
+  
+  try {
+    const response = await fetch(API_BASE + '/location/sent/' + currentUserId);
+    const result = await response.json();
+    
+    // Get all requests (pending and active) where current user is the requester
+    const serverRequestTargets = new Set();
+    if (result.requests) {
+      result.requests.forEach(req => {
+        serverRequestTargets.add(req.target_id);
+      });
+    }
+    
+    // Sync local state with server state
+    const toRemove = [];
+    const toAdd = [];
+    
+    // Remove requests that no longer exist on server
+    activeLocationRequests.forEach(friendId => {
+      if (!serverRequestTargets.has(friendId)) {
+        toRemove.push(friendId);
+      }
+    });
+    
+    // Add requests that exist on server but not locally
+    serverRequestTargets.forEach(friendId => {
+      if (!activeLocationRequests.has(friendId)) {
+        toAdd.push(friendId);
+      }
+    });
+    
+    toRemove.forEach(friendId => {
+      activeLocationRequests.delete(friendId);
+      waypointNotificationShown.delete(friendId);
+    });
+    
+    toAdd.forEach(friendId => {
+      activeLocationRequests.add(friendId);
+    });
+    
+    if (toRemove.length > 0 || toAdd.length > 0) {
+      updateFriendsWindow();
+    }
+  } catch (error) {
+    console.error('Error syncing location requests:', error);
+  }
+}
+
 setInterval(() => {
   if (currentUserId) {
     refreshRequests();
     refreshFriends();
     refreshLocationRequests();
     checkLocationRequests();
+    syncActiveLocationRequests();
   }
 }, 5000);
 
