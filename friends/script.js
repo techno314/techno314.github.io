@@ -106,6 +106,8 @@ function shareLocationData(locationData, requesterId) {
   });
 }
 
+let waypointNotificationShown = new Set();
+
 async function checkLocationRequests() {
   if (!currentUserId) return;
   
@@ -121,7 +123,10 @@ async function checkLocationRequests() {
             x: loc.pos_x, 
             y: loc.pos_y 
           }, '*');
-          showNotification('Waypoint set from ' + loc.sharer_name, 'success');
+          if (!waypointNotificationShown.has(loc.sharer_id)) {
+            showNotification('Waypoint set from ' + loc.sharer_name, 'success');
+            waypointNotificationShown.add(loc.sharer_id);
+          }
         }
       });
     }
@@ -545,26 +550,60 @@ async function refreshLocationRequests() {
       lastLocationRequestCount = result.requests.length;
       
       locationRequestsList.innerHTML = result.requests.map(req => {
-        const isAccepted = acceptedLocationRequests.has(req.requester_id);
-        const buttonText = isAccepted ? 'Stop' : 'Accept';
-        const buttonColor = isAccepted ? '#f44336' : '#43a047';
-        const buttonAction = isAccepted ? 'declineLocationRequest(' + req.requester_id + ')' : 'acceptLocationRequest(' + req.requester_id + ')';
-        return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • ' + (isAccepted ? 'Sharing location' : 'Pending acceptance') + '</div></div><div><button onclick="' + buttonAction + '" style="background: ' + buttonColor + '; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">' + buttonText + '</button></div></div>';
+        if (req.status === 'pending') {
+          return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • Wants to track your location</div></div><div><button onclick="acceptLocationRequest(' + req.requester_id + ')" style="background: #43a047; color: white; border: none; border-radius: 3px; padding: 6px 8px; margin-right: 4px; cursor: pointer;">Accept</button><button onclick="denyLocationRequest(' + req.requester_id + ')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">Deny</button></div></div>';
+        } else {
+          acceptedLocationRequests.add(req.requester_id);
+          return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • Sharing location</div></div><div><button onclick="declineLocationRequest(' + req.requester_id + ')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">Stop</button></div></div>';
+        }
       }).join('');
     } else {
       if (lastLocationRequestCount === -1) lastLocationRequestCount = 0;
       else lastLocationRequestCount = 0;
-      locationRequestsList.innerHTML = '<div style="text-align: center; color: #99aab5; font-size: 0.8rem; padding: 1rem;">No active location tracking</div>';
+      locationRequestsList.innerHTML = '<div style="text-align: center; color: #99aab5; font-size: 0.8rem; padding: 1rem;">No location requests</div>';
     }
   } catch (error) {
     document.getElementById('locationRequestsList').innerHTML = '<div style="text-align: center; color: #f44336; font-size: 0.8rem;">Error loading requests</div>';
   }
 }
 
+
+
 async function acceptLocationRequest(requesterId) {
-  acceptedLocationRequests.add(requesterId);
-  refreshLocationRequests();
-  showNotification('Location sharing started', 'success');
+  try {
+    const response = await fetch(API_BASE + '/location/accept', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requester_id: requesterId, target_id: currentUserId })
+    });
+    const result = await response.json();
+    
+    if (result.success) {
+      acceptedLocationRequests.add(requesterId);
+      refreshLocationRequests();
+      showNotification('Location sharing started', 'success');
+    }
+  } catch (error) {
+    console.error('Error accepting location request:', error);
+  }
+}
+
+async function denyLocationRequest(requesterId) {
+  try {
+    const response = await fetch(API_BASE + '/location/deny', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requester_id: requesterId, target_id: currentUserId })
+    });
+    const result = await response.json();
+    
+    if (result.success) {
+      refreshLocationRequests();
+      showNotification('Location request denied', 'info');
+    }
+  } catch (error) {
+    console.error('Error denying location request:', error);
+  }
 }
 
 async function declineLocationRequest(requesterId) {
@@ -578,6 +617,7 @@ async function declineLocationRequest(requesterId) {
     
     if (result.success) {
       acceptedLocationRequests.delete(requesterId);
+      waypointNotificationShown.delete(requesterId);
       refreshLocationRequests();
       showNotification('Location tracking stopped', 'info');
     }
