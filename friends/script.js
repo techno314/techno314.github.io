@@ -49,20 +49,24 @@ async function requestLocation(friendId) {
   }
 }
 
-async function acceptLocationRequest(requesterId) {
-  if (!currentUserId) return;
-  
-  // Request location data from game
-  if (window.parent && window.parent !== window) {
-    window.parent.postMessage({ 
-      type: 'getNamedData', 
-      keys: ['pos_x', 'pos_y']
-    }, '*');
-    
-    // Store the requester ID for when we get the location data
-    window.pendingLocationShare = requesterId;
-  }
+let activeLocationSharing = new Set();
+
+function startLocationSharing() {
+  setInterval(async () => {
+    if (currentUserId && activeLocationSharing.size > 0) {
+      // Request current location from game
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ 
+          type: 'getNamedData', 
+          keys: ['pos_x', 'pos_y']
+        }, '*');
+        window.pendingAutoShare = true;
+      }
+    }
+  }, 5000);
 }
+
+startLocationSharing();
 
 function shareLocationData(locationData, requesterId) {
   fetch(API_BASE + '/location/share', {
@@ -313,7 +317,10 @@ function updateFriendsWindow() {
     const sessionDuration = getConnectedSeconds(friend);
     const timeStr = formatSeconds(sessionDuration);
     const betaIndicator = friend.server === 'njyvop' ? ' [BETA]' : '';
-    return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span>' + friend.name + ' (ID: ' + friend.friend_id + ')' + betaIndicator + ' (' + timeStr + ')</span><button onclick="requestLocation(' + friend.friend_id + ')" style="background: #5865f2; color: white; border: none; border-radius: 3px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer;">📍</button></div>';
+    const isTracking = activeLocationRequests.has(friend.friend_id);
+    const buttonStyle = isTracking ? 'background: #43a047; color: white;' : 'background: #5865f2; color: white;';
+    const buttonText = isTracking ? '📍✓' : '📍';
+    return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span>' + friend.name + ' (ID: ' + friend.friend_id + ')' + betaIndicator + ' (' + timeStr + ')</span><button onclick="toggleLocationRequest(' + friend.friend_id + ')" style="' + buttonStyle + ' border: none; border-radius: 3px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer;">' + buttonText + '</button></div>';
   }).join('');
   
   friendsWindow.innerHTML = header + friendsList;
@@ -470,14 +477,26 @@ window.addEventListener('message', (event) => {
     refreshFriends();
   }
   
-  // Handle location data response only when requested
-  if (window.pendingLocationShare && payload.pos_x && payload.pos_y) {
+  // Handle location data response
+  if (payload.pos_x && payload.pos_y) {
     const locationData = {
       pos_x: payload.pos_x,
       pos_y: payload.pos_y
     };
-    shareLocationData(locationData, window.pendingLocationShare);
-    window.pendingLocationShare = null;
+    
+    // Handle one-time location share
+    if (window.pendingLocationShare) {
+      shareLocationData(locationData, window.pendingLocationShare);
+      window.pendingLocationShare = null;
+    }
+    
+    // Handle automatic location sharing for active requests
+    if (window.pendingAutoShare && activeLocationSharing.size > 0) {
+      activeLocationSharing.forEach(requesterId => {
+        shareLocationData(locationData, requesterId);
+      });
+      window.pendingAutoShare = false;
+    }
   }
 });
 
@@ -498,20 +517,27 @@ async function refreshLocationRequests() {
     const response = await fetch(API_BASE + '/location/requests/' + currentUserId);
     const result = await response.json();
     
+    // Update active location sharing set
+    const newActiveSharing = new Set();
+    if (result.requests) {
+      result.requests.forEach(req => newActiveSharing.add(req.requester_id));
+    }
+    activeLocationSharing = newActiveSharing;
+    
     const locationRequestsList = document.getElementById('locationRequestsList');
     if (result.requests && result.requests.length > 0) {
       if (result.requests.length > lastLocationRequestCount && lastLocationRequestCount >= 0) {
-        showNotification('New location request received!', 'info');
+        showNotification('New location tracking request!', 'info');
       }
       lastLocationRequestCount = result.requests.length;
       
       locationRequestsList.innerHTML = result.requests.map(req => {
-        return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • ' + new Date(req.created_at).toUTCString() + '</div></div><div><button onclick="acceptLocationRequest(' + req.requester_id + ')" style="background: #43a047; color: white; border: none; border-radius: 3px; padding: 6px 8px; margin-right: 4px; cursor: pointer;">Share</button><button onclick="declineLocationRequest(' + req.requester_id + ')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">Deny</button></div></div>';
+        return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • Active tracking</div></div><div><button onclick="declineLocationRequest(' + req.requester_id + ')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">Stop</button></div></div>';
       }).join('');
     } else {
       if (lastLocationRequestCount === -1) lastLocationRequestCount = 0;
       else lastLocationRequestCount = 0;
-      locationRequestsList.innerHTML = '<div style="text-align: center; color: #99aab5; font-size: 0.8rem; padding: 1rem;">No location requests</div>';
+      locationRequestsList.innerHTML = '<div style="text-align: center; color: #99aab5; font-size: 0.8rem; padding: 1rem;">No active location tracking</div>';
     }
   } catch (error) {
     document.getElementById('locationRequestsList').innerHTML = '<div style="text-align: center; color: #f44336; font-size: 0.8rem;">Error loading requests</div>';
@@ -520,19 +546,19 @@ async function refreshLocationRequests() {
 
 async function declineLocationRequest(requesterId) {
   try {
-    const response = await fetch(API_BASE + '/location/decline', {
+    const response = await fetch(API_BASE + '/location/toggle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requester_id: requesterId, target_id: currentUserId })
+      body: JSON.stringify({ requester_id: requesterId, target_id: currentUserId, active: false })
     });
     const result = await response.json();
     
     if (result.success) {
       refreshLocationRequests();
-      showNotification('Location request declined', 'info');
+      showNotification('Location tracking stopped', 'info');
     }
   } catch (error) {
-    console.error('Error declining location request:', error);
+    console.error('Error stopping location tracking:', error);
   }
 }
 
