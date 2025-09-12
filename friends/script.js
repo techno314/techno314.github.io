@@ -336,6 +336,18 @@ startLocationSharing();
 
 function shareLocationData(locationData, requesterId) {
   devLog('[shareLocationData] Sharing location with requesterId:', requesterId, 'data:', locationData);
+  
+  if (socket && socket.connected) {
+    devLog('[shareLocationData] Using WebSocket');
+    socket.emit('share_location', {
+      sharer_id: currentUserId,
+      requester_id: requesterId,
+      location: locationData
+    });
+    return;
+  }
+  
+  devLog('[shareLocationData] Using HTTP fallback');
   const requestBody = { 
     sharer_id: currentUserId, 
     requester_id: requesterId,
