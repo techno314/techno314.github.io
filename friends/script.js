@@ -573,6 +573,7 @@ async function refreshLocationRequests() {
           return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • Wants to track your location</div></div><div><button onclick="acceptLocationRequest(' + req.requester_id + ')" style="background: #43a047; color: white; border: none; border-radius: 3px; padding: 6px 8px; margin-right: 4px; cursor: pointer;">Accept</button><button onclick="denyLocationRequest(' + req.requester_id + ')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">Deny</button></div></div>';
         } else {
           acceptedLocationRequests.add(req.requester_id);
+          activeLocationTracking.add(req.requester_id);
           return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • Sharing location</div></div><div><button onclick="declineLocationRequest(' + req.requester_id + ')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">Stop</button></div></div>';
         }
       }).join('');
@@ -647,65 +648,7 @@ async function declineLocationRequest(requesterId) {
 
 let activeLocationTracking = new Set();
 
-async function syncActiveLocationRequests() {
-  if (!currentUserId) return;
-  
-  try {
-    const response = await fetch(API_BASE + '/location/sent/' + currentUserId);
-    const result = await response.json();
-    
-    // Get all requests where current user is the requester
-    const serverRequestTargets = new Set();
-    const serverActiveTargets = new Set();
-    if (result.requests) {
-      result.requests.forEach(req => {
-        serverRequestTargets.add(req.target_id);
-        if (req.status === 'active') {
-          serverActiveTargets.add(req.target_id);
-        }
-      });
-    }
-    
-    // Sync local state with server state
-    const toRemove = [];
-    const toAdd = [];
-    
-    // Remove requests that no longer exist on server
-    activeLocationRequests.forEach(friendId => {
-      if (!serverRequestTargets.has(friendId)) {
-        toRemove.push(friendId);
-      }
-    });
-    
-    // Add requests that exist on server but not locally
-    serverRequestTargets.forEach(friendId => {
-      if (!activeLocationRequests.has(friendId)) {
-        toAdd.push(friendId);
-      }
-    });
-    
-    // Update active tracking set
-    activeLocationTracking.clear();
-    serverActiveTargets.forEach(friendId => {
-      activeLocationTracking.add(friendId);
-    });
-    
-    toRemove.forEach(friendId => {
-      activeLocationRequests.delete(friendId);
-      waypointNotificationShown.delete(friendId);
-    });
-    
-    toAdd.forEach(friendId => {
-      activeLocationRequests.add(friendId);
-    });
-    
-    if (toRemove.length > 0 || toAdd.length > 0) {
-      updateFriendsWindow();
-    }
-  } catch (error) {
-    console.error('Error syncing location requests:', error);
-  }
-}
+
 
 setInterval(() => {
   if (currentUserId) {
@@ -713,7 +656,6 @@ setInterval(() => {
     refreshFriends();
     refreshLocationRequests();
     checkLocationRequests();
-    syncActiveLocationRequests();
   }
 }, 5000);
 
