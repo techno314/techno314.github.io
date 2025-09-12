@@ -28,8 +28,15 @@ function toggleSound() {
   document.getElementById('soundToggle').textContent = soundEnabled ? '🔊' : '🔇';
 }
 
+let toggleCooldown = new Set();
+
 async function toggleLocationRequest(friendId) {
   if (!currentUserId) return;
+  
+  // Prevent spam clicking
+  if (toggleCooldown.has(friendId)) {
+    return;
+  }
   
   const hasRequest = activeLocationRequests.has(friendId);
   const isActiveTracking = activeLocationTracking.has(friendId);
@@ -39,6 +46,10 @@ async function toggleLocationRequest(friendId) {
     showNotification('Location request already pending', 'info');
     return;
   }
+  
+  // Add cooldown
+  toggleCooldown.add(friendId);
+  setTimeout(() => toggleCooldown.delete(friendId), 2000);
   
   try {
     const response = await fetch(API_BASE + '/location/toggle', {
@@ -636,15 +647,8 @@ async function declineLocationRequest(requesterId) {
 
 let activeLocationTracking = new Set();
 
-let lastSyncTime = 0;
-
 async function syncActiveLocationRequests() {
   if (!currentUserId) return;
-  
-  // Don't sync too frequently to avoid overriding immediate state changes
-  const now = Date.now();
-  if (now - lastSyncTime < 3000) return;
-  lastSyncTime = now;
   
   try {
     const response = await fetch(API_BASE + '/location/sent/' + currentUserId);
@@ -662,19 +666,28 @@ async function syncActiveLocationRequests() {
       });
     }
     
-    // Update active tracking set
-    const previousActiveTracking = new Set(activeLocationTracking);
-    activeLocationTracking.clear();
-    serverActiveTargets.forEach(friendId => {
-      activeLocationTracking.add(friendId);
-    });
-    
-    // Only sync requests that were removed on server side
+    // Sync local state with server state
     const toRemove = [];
+    const toAdd = [];
+    
+    // Remove requests that no longer exist on server
     activeLocationRequests.forEach(friendId => {
       if (!serverRequestTargets.has(friendId)) {
         toRemove.push(friendId);
       }
+    });
+    
+    // Add requests that exist on server but not locally
+    serverRequestTargets.forEach(friendId => {
+      if (!activeLocationRequests.has(friendId)) {
+        toAdd.push(friendId);
+      }
+    });
+    
+    // Update active tracking set
+    activeLocationTracking.clear();
+    serverActiveTargets.forEach(friendId => {
+      activeLocationTracking.add(friendId);
     });
     
     toRemove.forEach(friendId => {
@@ -682,11 +695,11 @@ async function syncActiveLocationRequests() {
       waypointNotificationShown.delete(friendId);
     });
     
-    // Update UI if tracking state changed or requests were removed
-    const trackingChanged = previousActiveTracking.size !== activeLocationTracking.size || 
-                           [...previousActiveTracking].some(id => !activeLocationTracking.has(id));
+    toAdd.forEach(friendId => {
+      activeLocationRequests.add(friendId);
+    });
     
-    if (toRemove.length > 0 || trackingChanged) {
+    if (toRemove.length > 0 || toAdd.length > 0) {
       updateFriendsWindow();
     }
   } catch (error) {
