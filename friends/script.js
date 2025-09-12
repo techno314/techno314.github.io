@@ -41,7 +41,7 @@ async function toggleLocationRequest(friendId) {
   const hasRequest = activeLocationRequests.has(friendId);
   const isActiveTracking = activeLocationTracking.has(friendId);
   
-  // If there's already a pending request (orange state), don't allow new requests
+  // If there's a pending request (orange state) but not active, don't allow action
   if (hasRequest && !isActiveTracking) {
     showNotification('Location request already pending', 'info');
     return;
@@ -68,10 +68,12 @@ async function toggleLocationRequest(friendId) {
     const result = await response.json();
     
     if (result.success) {
-      if (!hasRequest) {
+      if (!hasRequest && !isActiveTracking) {
+        // Sending new request
         activeLocationRequests.add(friendId);
         showNotification('Location request sent to ' + friendId, 'success');
-      } else {
+      } else if (hasRequest || isActiveTracking) {
+        // Stopping existing request/tracking
         activeLocationRequests.delete(friendId);
         activeLocationTracking.delete(friendId);
         waypointNotificationShown.delete(friendId);
