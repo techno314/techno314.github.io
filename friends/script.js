@@ -648,7 +648,26 @@ async function declineLocationRequest(requesterId) {
 
 let activeLocationTracking = new Set();
 
-
+async function updateLocationTrackingStatus() {
+  if (!currentUserId) return;
+  
+  try {
+    const response = await fetch(API_BASE + '/location/sent/' + currentUserId);
+    const result = await response.json();
+    
+    activeLocationTracking.clear();
+    if (result.requests) {
+      result.requests.forEach(req => {
+        if (req.status === 'active') {
+          activeLocationTracking.add(req.target_id);
+        }
+      });
+    }
+    updateFriendsWindow();
+  } catch (error) {
+    console.error('Error updating tracking status:', error);
+  }
+}
 
 setInterval(() => {
   if (currentUserId) {
@@ -656,6 +675,7 @@ setInterval(() => {
     refreshFriends();
     refreshLocationRequests();
     checkLocationRequests();
+    updateLocationTrackingStatus();
   }
 }, 5000);
 
