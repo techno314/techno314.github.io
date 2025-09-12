@@ -28,7 +28,35 @@ function toggleSound() {
   document.getElementById('soundToggle').textContent = soundEnabled ? '🔊' : '🔇';
 }
 
-
+async function toggleLocationRequest(friendId) {
+  if (!currentUserId) return;
+  
+  const isActive = activeLocationRequests.has(friendId);
+  
+  try {
+    const response = await fetch(API_BASE + '/location/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requester_id: currentUserId, target_id: friendId, active: !isActive })
+    });
+    const result = await response.json();
+    
+    if (result.success) {
+      if (!isActive) {
+        activeLocationRequests.add(friendId);
+        showNotification('Location tracking started for ' + friendId, 'success');
+      } else {
+        activeLocationRequests.delete(friendId);
+        showNotification('Location tracking stopped for ' + friendId, 'info');
+      }
+      updateFriendsWindow();
+    } else {
+      showNotification(result.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error toggling location request:', error);
+  }
+}
 
 let activeLocationSharing = new Set();
 
