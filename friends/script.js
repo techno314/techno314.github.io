@@ -31,13 +31,20 @@ function toggleSound() {
 async function toggleLocationRequest(friendId) {
   if (!currentUserId) return;
   
-  const isActive = activeLocationRequests.has(friendId);
+  const hasRequest = activeLocationRequests.has(friendId);
+  const isActiveTracking = activeLocationTracking.has(friendId);
+  
+  // If there's already a pending request (orange state), don't allow new requests
+  if (hasRequest && !isActiveTracking) {
+    showNotification('Location request already pending', 'info');
+    return;
+  }
   
   try {
     const response = await fetch(API_BASE + '/location/toggle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requester_id: currentUserId, target_id: friendId, active: !isActive })
+      body: JSON.stringify({ requester_id: currentUserId, target_id: friendId, active: !hasRequest })
     });
     
     if (!response.ok) {
@@ -50,11 +57,13 @@ async function toggleLocationRequest(friendId) {
     const result = await response.json();
     
     if (result.success) {
-      if (!isActive) {
+      if (!hasRequest) {
         activeLocationRequests.add(friendId);
         showNotification('Location request sent to ' + friendId, 'success');
       } else {
         activeLocationRequests.delete(friendId);
+        activeLocationTracking.delete(friendId);
+        waypointNotificationShown.delete(friendId);
         showNotification('Location tracking stopped for ' + friendId, 'info');
       }
       updateFriendsWindow();
