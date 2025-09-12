@@ -710,7 +710,7 @@ function updateFriendsWindow() {
     const timeStr = formatSeconds(sessionDuration);
     const betaIndicator = friend.server === 'njyvop' ? ' [BETA]' : '';
     const hasRequest = activeLocationRequests.has(friend.friend_id);
-    const isActive = activeLocationTracking.has(friend.friend_id) || acceptedLocationRequests.has(friend.friend_id);
+    const isActive = activeLocationTracking.has(friend.friend_id);
     const buttonStyle = isActive ? 'background: #43a047; color: white;' : (hasRequest ? 'background: #ffa500; color: white;' : 'background: #5865f2; color: white;');
     const buttonText = isActive ? '📍✓' : (hasRequest ? '📍⏳' : '📍');
     devLog('[updateFriendsWindow] Friend', friend.name, '- hasRequest:', hasRequest, 'isActive:', isActive);
