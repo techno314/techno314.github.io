@@ -434,7 +434,7 @@ function startLocationSharing() {
         window.pendingAutoShare = true;
       }
     }
-  }, 5000);
+  }, 1000);
 }
 
 startLocationSharing();
