@@ -2,7 +2,7 @@ const API_BASE = 'https://api.grayflare.space';
 let currentUserId = '';
 let devMode = false;
 let socket = null;
-let useWebSocket = true; // WebSocket enabled by default, HTTP as fallback
+let useWebSocket = true; // WebSocket only - no HTTP fallback
 let isConnecting = false;
 let reconnectTimeout = null;
 
@@ -145,6 +145,7 @@ function initializeWebSocket() {
   socket.on('location_request_received', (data) => {
     devLog('[WebSocket] New location request received:', data);
     refreshLocationRequests();
+    showNotification('New location tracking request!', 'info');
   });
   
   socket.on('location_request_cancelled', (data) => {
@@ -411,42 +412,9 @@ async function toggleLocationRequest(friendId) {
     return;
   }
   
-  try {
-    devLog('[toggleLocationRequest] Using HTTP fallback');
-    const requestBody = { requester_id: currentUserId, target_id: friendId, active: willActivate };
-    
-    const response = await fetch(API_BASE + '/location/toggle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
-    
-    if (!response.ok) {
-      const text = await response.text();
-      showNotification('Server error: ' + response.status, 'error');
-      return;
-    }
-    
-    const result = await response.json();
-    
-    if (result.success) {
-      if (!hasRequest && !isActiveTracking) {
-        activeLocationRequests.add(String(friendId));
-        showNotification('Location request sent to ' + friendId, 'success');
-      } else if (hasRequest || isActiveTracking) {
-        activeLocationRequests.delete(String(friendId));
-        activeLocationTracking.delete(String(friendId));
-        waypointNotificationShown.delete(String(friendId));
-        showNotification('Location tracking stopped for ' + friendId, 'info');
-      }
-      updateFriendsWindow();
-    } else {
-      showNotification(result.error, 'error');
-    }
-  } catch (error) {
-    devLog('[toggleLocationRequest] Exception:', error);
-    showNotification('Connection error', 'error');
-  }
+  // WebSocket not connected
+  devLog('[toggleLocationRequest] WebSocket not connected');
+  showNotification('WebSocket not connected', 'error');
 }
 
 let activeLocationSharing = new Set();
@@ -516,21 +484,8 @@ let waypointNotificationShown = new Set();
 let lastNotificationCheck = 0;
 
 async function checkAdminNotifications() {
-  if (socket && socket.connected) return;
-  
-  try {
-    const response = await fetch(API_BASE + '/api/notifications/check?since=' + lastNotificationCheck);
-    if (response.ok) {
-      const result = await response.json();
-      if (result.notifications && result.notifications.length > 0) {
-        result.notifications.forEach(notif => {
-          showNotification('Admin: ' + notif.message, 'info');
-        });
-        lastNotificationCheck = Date.now();
-      }
-    }
-  } catch (error) {
-    devLog('[checkAdminNotifications] Error:', error);
+  if (!socket || !socket.connected) {
+    devLog('[checkAdminNotifications] WebSocket not connected');
   }
 }
 
@@ -544,16 +499,8 @@ async function checkLocationRequests() {
   if (socket && socket.connected) {
     devLog('[checkLocationRequests] Using WebSocket');
     socket.emit('get_received_locations', { user_id: currentUserId });
-    return;
-  }
-  
-  try {
-    devLog('[checkLocationRequests] Using HTTP fallback');
-    const response = await fetch(API_BASE + '/location/received/' + currentUserId);
-    const result = await response.json();
-    handleReceivedLocationsUpdate(result.locations);
-  } catch (error) {
-    devLog('[checkLocationRequests] Error:', error);
+  } else {
+    devLog('[checkLocationRequests] WebSocket not connected');
   }
 }
 
@@ -593,30 +540,9 @@ async function sendFriendRequest() {
   if (socket && socket.connected) {
     devLog('[sendFriendRequest] Using WebSocket');
     socket.emit('send_friend_request', { sender_id: currentUserId, receiver_id: targetUser });
-    return;
-  }
-  
-  try {
-    devLog('[sendFriendRequest] Using HTTP fallback');
-    const requestBody = { sender_id: currentUserId, receiver_id: targetUser };
-    const response = await fetch(API_BASE + '/friend/request', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
-    const result = await response.json();
-    
-    if (result.success) {
-      document.getElementById('sendStatus').innerHTML = '<span class="status status-online">Request sent!</span>';
-      document.getElementById('targetUser').value = '';
-      showNotification('Friend request sent!', 'success');
-    } else {
-      document.getElementById('sendStatus').innerHTML = '<span class="status status-error">' + result.error + '</span>';
-      showNotification(result.error, 'error');
-    }
-  } catch (error) {
-    devLog('[sendFriendRequest] Error:', error);
-    document.getElementById('sendStatus').innerHTML = '<span class="status status-error">Connection error</span>';
+  } else {
+    devLog('[sendFriendRequest] WebSocket not connected');
+    document.getElementById('sendStatus').innerHTML = '<span class="status status-error">WebSocket not connected</span>';
   }
 }
 
@@ -626,29 +552,9 @@ async function acceptRequest(senderId) {
   if (socket && socket.connected) {
     devLog('[acceptRequest] Using WebSocket');
     socket.emit('accept_friend_request', { sender_id: senderId, receiver_id: currentUserId });
-    return;
-  }
-  
-  try {
-    devLog('[acceptRequest] Using HTTP fallback');
-    const requestBody = { sender_id: senderId, receiver_id: currentUserId };
-    const response = await fetch(API_BASE + '/friend/accept', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
-    const result = await response.json();
-    
-    if (result.success) {
-      refreshRequests();
-      refreshFriends();
-      showNotification('Friend request accepted!', 'success');
-    } else {
-      showNotification(result.error || 'Failed to accept request', 'error');
-    }
-  } catch (error) {
-    devLog('[acceptRequest] Error:', error);
-    showNotification('Connection error', 'error');
+  } else {
+    devLog('[acceptRequest] WebSocket not connected');
+    showNotification('WebSocket not connected', 'error');
   }
 }
 
@@ -658,28 +564,9 @@ async function declineRequest(senderId) {
   if (socket && socket.connected) {
     devLog('[declineRequest] Using WebSocket');
     socket.emit('decline_friend_request', { sender_id: senderId, receiver_id: currentUserId });
-    return;
-  }
-  
-  try {
-    devLog('[declineRequest] Using HTTP fallback');
-    const requestBody = { sender_id: senderId, receiver_id: currentUserId };
-    const response = await fetch(API_BASE + '/friend/decline', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
-    const result = await response.json();
-    
-    if (result.success) {
-      refreshRequests();
-      showNotification('Friend request declined', 'info');
-    } else {
-      showNotification(result.error || 'Failed to decline request', 'error');
-    }
-  } catch (error) {
-    devLog('[declineRequest] Error:', error);
-    showNotification('Connection error', 'error');
+  } else {
+    devLog('[declineRequest] WebSocket not connected');
+    showNotification('WebSocket not connected', 'error');
   }
 }
 
@@ -695,18 +582,9 @@ async function refreshRequests() {
   if (socket && socket.connected) {
     devLog('[refreshRequests] Using WebSocket');
     socket.emit('get_friend_requests', { user_id: currentUserId });
-    return;
-  }
-  
-  devLog('[refreshRequests] WebSocket not available - socket:', !!socket, 'connected:', socket ? socket.connected : 'N/A');
-  
-  try {
-    devLog('[refreshRequests] Using HTTP fallback');
-    const response = await fetch(API_BASE + '/friend/requests/' + currentUserId);
-    const result = await response.json();
-    handleFriendRequestsUpdate(result.requests);
-  } catch (error) {
-    document.getElementById('requestsList').innerHTML = '<div style="text-align: center; color: #f44336; font-size: 0.8rem;">Error loading requests</div>';
+  } else {
+    devLog('[refreshRequests] WebSocket not connected');
+    document.getElementById('requestsList').innerHTML = '<div style="text-align: center; color: #f44336; font-size: 0.8rem;">WebSocket not connected</div>';
   }
 }
 
@@ -782,29 +660,8 @@ async function refreshFriends() {
   if (socket && socket.connected) {
     devLog('[refreshFriends] Using WebSocket, requesting friends for user:', currentUserId);
     socket.emit('get_friends', { user_id: currentUserId });
-    return;
-  }
-  
-  devLog('[refreshFriends] WebSocket not available - socket:', !!socket, 'connected:', socket ? socket.connected : 'N/A');
-  
-  try {
-    devLog('[refreshFriends] Using HTTP fallback');
-    // Also fetch players data for username lookup
-    const playersResponse = await fetch(API_BASE + '/players');
-    const playersResult = await playersResponse.json();
-    
-    // Cache players data for friend requests
-    if (playersResult.players) {
-      cached_players = playersResult.players.map(p => [p.name, '', parseInt(p.id), '', '', p.job || 'Unemployed']);
-      devLog('[refreshFriends] Cached', cached_players.length, 'players');
-    }
-    
-    const response = await fetch(API_BASE + '/friends/' + currentUserId);
-    const result = await response.json();
-    const newFriendsData = result.friends || [];
-    handleFriendsUpdate(newFriendsData);
-  } catch (error) {
-    devLog('[refreshFriends] Error:', error);
+  } else {
+    devLog('[refreshFriends] WebSocket not connected');
   }
 }
 
@@ -950,31 +807,9 @@ async function removeFriendById() {
   if (socket && socket.connected) {
     devLog('[removeFriendById] Using WebSocket');
     socket.emit('remove_friend', { user_id: currentUserId, friend_id: friendId });
-    return;
-  }
-  
-  try {
-    devLog('[removeFriendById] Using HTTP fallback');
-    const response = await fetch(API_BASE + '/friend/remove', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: currentUserId, friend_id: friendId })
-    });
-    const result = await response.json();
-    
-    if (result.success) {
-      document.getElementById('removeStatus').innerHTML = '<span class="status status-online">Friend removed!</span>';
-      document.getElementById('removeFriendId').value = '';
-      suppressOfflineNotifications = true;
-      refreshFriends();
-      setTimeout(() => suppressOfflineNotifications = false, 1000);
-      showNotification('Friend removed!', 'success');
-    } else {
-      document.getElementById('removeStatus').innerHTML = '<span class="status status-error">' + result.error + '</span>';
-      showNotification(result.error, 'error');
-    }
-  } catch (error) {
-    document.getElementById('removeStatus').innerHTML = '<span class="status status-error">Connection error</span>';
+  } else {
+    devLog('[removeFriendById] WebSocket not connected');
+    document.getElementById('removeStatus').innerHTML = '<span class="status status-error">WebSocket not connected</span>';
   }
 }
 
@@ -990,29 +825,9 @@ async function blockUser() {
   if (socket && socket.connected) {
     devLog('[blockUser] Using WebSocket');
     socket.emit('block_user', { blocker_id: currentUserId, blocked_id: blockId });
-    return;
-  }
-  
-  try {
-    devLog('[blockUser] Using HTTP fallback');
-    const response = await fetch(API_BASE + '/user/block', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ blocker_id: currentUserId, blocked_id: blockId })
-    });
-    const result = await response.json();
-    
-    if (result.success) {
-      document.getElementById('blockStatus').innerHTML = '<span class="status status-online">User blocked!</span>';
-      document.getElementById('blockUserId').value = '';
-      refreshFriends();
-      showNotification('User blocked!', 'success');
-    } else {
-      document.getElementById('blockStatus').innerHTML = '<span class="status status-error">' + result.error + '</span>';
-      showNotification(result.error, 'error');
-    }
-  } catch (error) {
-    document.getElementById('blockStatus').innerHTML = '<span class="status status-error">Connection error</span>';
+  } else {
+    devLog('[blockUser] WebSocket not connected');
+    document.getElementById('blockStatus').innerHTML = '<span class="status status-error">WebSocket not connected</span>';
   }
 }
 
@@ -1027,27 +842,8 @@ async function unblockUser() {
   
   if (socket && socket.connected) {
     socket.emit('unblock_user', { blocker_id: currentUserId, blocked_id: unblockId });
-    return;
-  }
-  
-  try {
-    const response = await fetch(API_BASE + '/user/unblock', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ blocker_id: currentUserId, blocked_id: unblockId })
-    });
-    const result = await response.json();
-    
-    if (response.ok && result.success) {
-      document.getElementById('blockStatus').innerHTML = '<span class="status status-online">User unblocked!</span>';
-      document.getElementById('blockUserId').value = '';
-      showNotification('User unblocked!', 'success');
-    } else {
-      document.getElementById('blockStatus').innerHTML = '<span class="status status-error">' + result.error + '</span>';
-      showNotification(result.error, 'error');
-    }
-  } catch (error) {
-    document.getElementById('blockStatus').innerHTML = '<span class="status status-error">Connection error</span>';
+  } else {
+    document.getElementById('blockStatus').innerHTML = '<span class="status status-error">WebSocket not connected</span>';
   }
 }
 
@@ -1132,17 +928,9 @@ async function refreshLocationRequests() {
   if (socket && socket.connected) {
     devLog('[refreshLocationRequests] Using WebSocket');
     socket.emit('get_location_requests', { user_id: currentUserId });
-    return;
-  }
-  
-  try {
-    devLog('[refreshLocationRequests] Using HTTP fallback');
-    const response = await fetch(API_BASE + '/location/requests/' + currentUserId);
-    const result = await response.json();
-    handleLocationRequestsUpdate(result.requests);
-  } catch (error) {
-    devLog('[refreshLocationRequests] Error:', error);
-    document.getElementById('locationRequestsList').innerHTML = '<div style="text-align: center; color: #f44336; font-size: 0.8rem;">Error loading requests</div>';
+  } else {
+    devLog('[refreshLocationRequests] WebSocket not connected');
+    document.getElementById('locationRequestsList').innerHTML = '<div style="text-align: center; color: #f44336; font-size: 0.8rem;">WebSocket not connected</div>';
   }
 }
 
@@ -1150,10 +938,6 @@ function handleLocationRequestsUpdate(requests) {
   devLog('[handleLocationRequestsUpdate] Processing requests:', requests);
   const locationRequestsList = document.getElementById('locationRequestsList');
   if (requests && requests.length > 0) {
-    if (requests.length > lastLocationRequestCount && lastLocationRequestCount >= 0) {
-      devLog('[handleLocationRequestsUpdate] New request detected, showing notification');
-      showNotification('New location tracking request!', 'info');
-    }
     lastLocationRequestCount = requests.length;
     
     locationRequestsList.innerHTML = requests.map(req => {
@@ -1181,47 +965,16 @@ function handleLocationRequestsUpdate(requests) {
 async function acceptLocationRequest(requesterId) {
   if (socket && socket.connected) {
     socket.emit('accept_location_request', { requester_id: requesterId, target_id: currentUserId });
-    return;
-  }
-  
-  try {
-    const response = await fetch(API_BASE + '/location/accept', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requester_id: requesterId, target_id: currentUserId })
-    });
-    const result = await response.json();
-    
-    if (result.success) {
-      acceptedLocationRequests.add(String(requesterId));
-      refreshLocationRequests();
-      showNotification('Location sharing started', 'success');
-    }
-  } catch (error) {
-    console.error('Error accepting location request:', error);
+  } else {
+    showNotification('WebSocket not connected', 'error');
   }
 }
 
 async function denyLocationRequest(requesterId) {
   if (socket && socket.connected) {
     socket.emit('deny_location_request', { requester_id: requesterId, target_id: currentUserId });
-    return;
-  }
-  
-  try {
-    const response = await fetch(API_BASE + '/location/deny', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requester_id: requesterId, target_id: currentUserId })
-    });
-    const result = await response.json();
-    
-    if (result.success) {
-      refreshLocationRequests();
-      showNotification('Location request denied', 'info');
-    }
-  } catch (error) {
-    console.error('Error denying location request:', error);
+  } else {
+    showNotification('WebSocket not connected', 'error');
   }
 }
 
@@ -1230,25 +983,8 @@ async function declineLocationRequest(requesterId) {
     socket.emit('toggle_location_tracking', { requester_id: requesterId, target_id: currentUserId, active: false });
     acceptedLocationRequests.delete(String(requesterId));
     waypointNotificationShown.delete(requesterId);
-    return;
-  }
-  
-  try {
-    const response = await fetch(API_BASE + '/location/toggle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requester_id: requesterId, target_id: currentUserId, active: false })
-    });
-    const result = await response.json();
-    
-    if (result.success) {
-      acceptedLocationRequests.delete(String(requesterId));
-      waypointNotificationShown.delete(requesterId);
-      refreshLocationRequests();
-      showNotification('Location tracking stopped', 'info');
-    }
-  } catch (error) {
-    console.error('Error stopping location tracking:', error);
+  } else {
+    showNotification('WebSocket not connected', 'error');
   }
 }
 
@@ -1264,16 +1000,8 @@ async function updateLocationTrackingStatus() {
   if (socket && socket.connected) {
     devLog('[updateLocationTrackingStatus] Using WebSocket');
     socket.emit('get_location_tracking', { user_id: currentUserId });
-    return;
-  }
-  
-  try {
-    devLog('[updateLocationTrackingStatus] Using HTTP fallback');
-    const response = await fetch(API_BASE + '/location/sent/' + currentUserId);
-    const result = await response.json();
-    handleLocationTrackingUpdate(result.requests);
-  } catch (error) {
-    devLog('[updateLocationTrackingStatus] Error:', error);
+  } else {
+    devLog('[updateLocationTrackingStatus] WebSocket not connected');
   }
 }
 
