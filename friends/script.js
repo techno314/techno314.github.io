@@ -172,7 +172,7 @@ function initializeWebSocket() {
   
   socket.on('force_reload', (data) => {
     devLog('[WebSocket] Force reload received');
-    showNotification('System update - reloading...', 'info');
+    showNotification('System update - reloading...', 'info', true);
     setTimeout(() => {
       localStorage.setItem('shouldPinAfterReload', 'true');
       window.location.reload();
@@ -233,15 +233,15 @@ function initializeWebSocket() {
   });
 }
 
-function showNotification(message, type = 'info') {
+function showNotification(message, type = 'info', noSound = false) {
   devLog('[showNotification] Message:', message, 'Type:', type);
   const notification = document.createElement('div');
   notification.className = `notification ${type}`;
   notification.textContent = message;
   document.body.appendChild(notification);
   
-  // Play notification sound if enabled
-  if (soundEnabled) {
+  // Play notification sound if enabled and not suppressed
+  if (soundEnabled && !noSound) {
     devLog('[showNotification] Playing sound');
     const audio = new Audio('notification.mp3');
     audio.volume = 0.1;
