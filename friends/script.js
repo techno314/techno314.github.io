@@ -173,7 +173,10 @@ function initializeWebSocket() {
   socket.on('force_reload', (data) => {
     devLog('[WebSocket] Force reload received');
     showNotification('System update - reloading...', 'info');
-    setTimeout(() => window.location.reload(), 2000);
+    setTimeout(() => {
+      localStorage.setItem('shouldPinAfterReload', 'true');
+      window.location.reload();
+    }, 2000);
   });
   
   socket.on('action_result', (data) => {
@@ -1365,3 +1368,10 @@ setTimeout(() => {
     requestGameData();
   }
 }, 2000);
+
+if (localStorage.getItem('shouldPinAfterReload') === 'true') {
+  localStorage.removeItem('shouldPinAfterReload');
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: 'pin' }, '*');
+  }
+}
