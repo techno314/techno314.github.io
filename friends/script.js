@@ -1,8 +1,10 @@
-const API_BASE = 'https://api.grayflare.space';
+const API_BASE = 'http://192.168.1.88:8022';
 let currentUserId = '';
 let devMode = false;
 let socket = null;
 let useWebSocket = true; // WebSocket enabled by default, HTTP as fallback
+let lastMaintenanceNotification = null;
+let lastStartupNotification = null;
 
 function devLog(...args) {
   if (devMode) console.log(...args);
@@ -46,6 +48,17 @@ function initializeWebSocket() {
   
   socket.on('connect', () => {
     devLog('[WebSocket] Connected successfully');
+    
+    // Check if this is a reconnection after disconnect
+    if (lastDisconnectTime && Date.now() - lastDisconnectTime < 60000) {
+      devLog('[WebSocket] Reconnection detected, enabling grace period');
+      reconnectionGracePeriod = true;
+      setTimeout(() => {
+        reconnectionGracePeriod = false;
+        devLog('[WebSocket] Grace period ended');
+      }, 30000);
+    }
+    
     if (currentUserId) {
       socket.emit('join_user', { user_id: currentUserId });
       // Refresh all data when WebSocket connects
@@ -58,6 +71,7 @@ function initializeWebSocket() {
   
   socket.on('disconnect', (reason) => {
     devLog('[WebSocket] Disconnected:', reason);
+    lastDisconnectTime = Date.now();
     if (useWebSocket) {
       setTimeout(() => {
         if (!socket || !socket.connected) {
@@ -83,7 +97,10 @@ function initializeWebSocket() {
   
   socket.on('friends_update', (data) => {
     devLog('[WebSocket] Friends update received:', data);
-    handleFriendsUpdate(data ? data.friends : []);
+    // Suppress friend updates during grace period to prevent offline notifications
+    if (!reconnectionGracePeriod) {
+      handleFriendsUpdate(data ? data.friends : []);
+    }
   });
   
   socket.on('friend_requests_update', (data) => {
@@ -173,6 +190,24 @@ function initializeWebSocket() {
   socket.on('server_startup', (data) => {
     devLog('[WebSocket] Server startup event received');
     serverStartTime = Date.now();
+    if (!lastStartupNotification || Date.now() - lastStartupNotification > 60000) {
+      lastStartupNotification = Date.now();
+      showNotification('Server restarted - notifications suppressed for 30s', 'info', true);
+    }
+  });
+  
+  socket.on('server_maintenance', (data) => {
+    devLog('[WebSocket] Server maintenance notification');
+    if (!lastMaintenanceNotification || Date.now() - lastMaintenanceNotification > 5000) {
+      lastMaintenanceNotification = Date.now();
+      showNotification('Server restarting - please wait...', 'info', true);
+      // Enable grace period immediately when maintenance starts
+      reconnectionGracePeriod = true;
+      setTimeout(() => {
+        reconnectionGracePeriod = false;
+        devLog('[WebSocket] Maintenance grace period ended');
+      }, 45000); // 45 seconds grace period for maintenance
+    }
   });
   
   socket.on('force_reload', (data) => {
@@ -707,6 +742,8 @@ let cached_players = [];
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
 let friendsWindow = document.getElementById('friendsWindow');
 let serverStartTime = null;
+let lastDisconnectTime = null;
+let reconnectionGracePeriod = false;
 
 // Set initial button states
 setTimeout(() => {
@@ -784,8 +821,8 @@ function handleFriendsUpdate(newFriendsData) {
   if (friendsData.length > 0) {
     const currentOnlineFriends = new Set(newFriendsData.filter(f => f.online).map(f => f.friend_id));
     
-    // Check for friends who came online (suppress for 30 seconds after server restart)
-    const suppressNotifications = serverStartTime && Date.now() - serverStartTime < 30000;
+    // Check for friends who came online (suppress during grace period or after server restart)
+    const suppressNotifications = reconnectionGracePeriod || (serverStartTime && Date.now() - serverStartTime < 30000);
     
     currentOnlineFriends.forEach(friendId => {
       if (!previousOnlineFriends.has(friendId)) {
@@ -799,8 +836,8 @@ function handleFriendsUpdate(newFriendsData) {
       }
     });
     
-    // Check for friends who went offline (but not if we're suppressing notifications due to friend removal)
-    if (!suppressOfflineNotifications) {
+    // Check for friends who went offline (but not if we're suppressing notifications due to friend removal or grace period)
+    if (!suppressOfflineNotifications && !reconnectionGracePeriod) {
       previousOnlineFriends.forEach(friendId => {
         if (!currentOnlineFriends.has(friendId)) {
           const friend = friendsData.find(f => f.friend_id === friendId);
