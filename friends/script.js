@@ -134,38 +134,14 @@ function initializeWebSocket() {
     handleFriendRequestsUpdate(data.requests);
   });
   
-  socket.on('location_requests_update', (data) => {
-    devLog('[WebSocket] Location requests update:', data);
-    handleLocationRequestsUpdate(data.requests);
-  });
-  
-  socket.on('location_tracking_update', (data) => {
-    devLog('[WebSocket] Location tracking update:', data);
-    handleLocationTrackingUpdate(data.requests);
-  });
+  // Old location request handlers removed
   
   socket.on('received_locations_update', (data) => {
     devLog('[WebSocket] Received locations update:', data);
     handleReceivedLocationsUpdate(data.locations);
   });
   
-  socket.on('location_request_received', (data) => {
-    devLog('[WebSocket] New location request received:', data);
-    refreshLocationRequests();
-    showNotification('New location tracking request!', 'info');
-  });
-  
-  socket.on('location_request_cancelled', (data) => {
-    devLog('[WebSocket] Location request cancelled:', data);
-    refreshLocationRequests();
-    updateLocationTrackingStatus();
-  });
-  
-  socket.on('location_request_accepted', (data) => {
-    devLog('[WebSocket] Location request accepted:', data);
-    updateLocationTrackingStatus();
-    showNotification('Location request accepted!', 'success');
-  });
+  // Old location request event handlers removed
   
   socket.on('friend_request_received', (data) => {
     devLog('[WebSocket] Friend request received:', data);
@@ -273,8 +249,6 @@ function initializeWebSocket() {
     devLog('[WebSocket] Requesting friends for user:', currentUserId);
     socket.emit('get_friends', { user_id: currentUserId });
     socket.emit('get_friend_requests', { user_id: currentUserId });
-    socket.emit('get_location_requests', { user_id: currentUserId });
-    socket.emit('get_location_tracking', { user_id: currentUserId });
   });
   
   socket.on('error', (data) => {
@@ -339,7 +313,7 @@ function toggleLocationSharing() {
   document.getElementById('shareToggle').textContent = locationSharingEnabled ? '📍' : '📏';
   devLog('[toggleLocationSharing] New state:', locationSharingEnabled);
   
-  if (socket && socket.connected) {
+  if (socket && socket.connected && currentUserId) {
     socket.emit('set_location_sharing', { user_id: currentUserId, enabled: locationSharingEnabled });
   }
 }
@@ -413,7 +387,7 @@ function editFriendName(friendId) {
 function startLocationSharing() {
   devLog('[startLocationSharing] Starting location sharing interval');
   setInterval(async () => {
-    if (currentUserId && locationSharingEnabled) {
+    if (currentUserId && locationSharingEnabled && socket && socket.connected) {
       devLog('[startLocationSharing] Broadcasting location to friends');
       if (window.parent && window.parent !== window && !window.pendingBroadcast) {
         window.parent.postMessage({ 
@@ -911,7 +885,7 @@ window.addEventListener('message', (event) => {
     };
     
     // Broadcast location to all friends if sharing is enabled
-    if (window.pendingBroadcast && locationSharingEnabled && socket && socket.connected) {
+    if (window.pendingBroadcast && locationSharingEnabled && socket && socket.connected && currentUserId) {
       devLog('[message] Broadcasting location to friends:', locationData);
       socket.emit('broadcast_location', { user_id: currentUserId, location: locationData });
       window.pendingBroadcast = false;
@@ -929,132 +903,13 @@ window.addEventListener('keydown', (e) => {
 
 let lastLocationRequestCount = -1;
 
-async function refreshLocationRequests() {
-  devLog('[refreshLocationRequests] Called');
-  if (!currentUserId) {
-    devLog('[refreshLocationRequests] No currentUserId, returning');
-    return;
-  }
-  
-  if (socket && socket.connected) {
-    devLog('[refreshLocationRequests] Using WebSocket');
-    socket.emit('get_location_requests', { user_id: currentUserId });
-  } else {
-    devLog('[refreshLocationRequests] WebSocket not connected');
-    document.getElementById('locationRequestsList').innerHTML = '<div style="text-align: center; color: #f44336; font-size: 0.8rem;">WebSocket not connected</div>';
-  }
-}
-
-function handleLocationRequestsUpdate(requests) {
-  devLog('[handleLocationRequestsUpdate] Processing requests:', requests);
-  const locationRequestsList = document.getElementById('locationRequestsList');
-  if (requests && requests.length > 0) {
-    lastLocationRequestCount = requests.length;
-    
-    locationRequestsList.innerHTML = requests.map(req => {
-      devLog('[handleLocationRequestsUpdate] Processing incoming request:', req);
-      if (req.status === 'pending') {
-        return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • Wants to track your location</div></div><div><button onclick="acceptLocationRequest(' + req.requester_id + ')" style="background: #43a047; color: white; border: none; border-radius: 3px; padding: 6px 8px; margin-right: 4px; cursor: pointer;">Accept</button><button onclick="denyLocationRequest(' + req.requester_id + ')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">Deny</button></div></div>';
-      } else {
-        devLog('[handleLocationRequestsUpdate] Adding to acceptedLocationRequests:', req.requester_id);
-        acceptedLocationRequests.add(String(req.requester_id));
-        return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • Sharing location</div></div><div><button onclick="declineLocationRequest(' + req.requester_id + ')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">Stop</button></div></div>';
-      }
-    }).join('');
-    
-    devLog('[handleLocationRequestsUpdate] acceptedLocationRequests updated:', Array.from(acceptedLocationRequests));
-  } else {
-    if (lastLocationRequestCount === -1) lastLocationRequestCount = 0;
-    else lastLocationRequestCount = 0;
-    locationRequestsList.innerHTML = '<div style="text-align: center; color: #99aab5; font-size: 0.8rem; padding: 1rem;">No location requests</div>';
-    devLog('[handleLocationRequestsUpdate] No incoming requests');
-  }
-}
-
-
-
-async function acceptLocationRequest(requesterId) {
-  if (socket && socket.connected) {
-    socket.emit('accept_location_request', { requester_id: requesterId, target_id: currentUserId });
-  } else {
-    showNotification('WebSocket not connected', 'error');
-  }
-}
-
-async function denyLocationRequest(requesterId) {
-  if (socket && socket.connected) {
-    socket.emit('deny_location_request', { requester_id: requesterId, target_id: currentUserId });
-  } else {
-    showNotification('WebSocket not connected', 'error');
-  }
-}
-
-async function declineLocationRequest(requesterId) {
-  if (socket && socket.connected) {
-    socket.emit('toggle_location_tracking', { requester_id: requesterId, target_id: currentUserId, active: false });
-    acceptedLocationRequests.delete(String(requesterId));
-    waypointNotificationShown.delete(requesterId);
-  } else {
-    showNotification('WebSocket not connected', 'error');
-  }
-}
-
-let activeLocationTracking = new Set();
-
-async function updateLocationTrackingStatus() {
-  devLog('[updateLocationTrackingStatus] Called');
-  if (!currentUserId) {
-    devLog('[updateLocationTrackingStatus] No currentUserId, returning');
-    return;
-  }
-  
-  if (socket && socket.connected) {
-    devLog('[updateLocationTrackingStatus] Using WebSocket');
-    socket.emit('get_location_tracking', { user_id: currentUserId });
-  } else {
-    devLog('[updateLocationTrackingStatus] WebSocket not connected');
-  }
-}
-
-function handleLocationTrackingUpdate(requests) {
-  devLog('[handleLocationTrackingUpdate] Processing requests:', requests);
-  
-  // Store previous state for comparison
-  const prevRequests = new Set(activeLocationRequests);
-  const prevTracking = new Set(activeLocationTracking);
-  
-  // Only manage outgoing requests (what you sent to others)
-  activeLocationRequests.clear();
-  activeLocationTracking.clear();
-  if (requests) {
-    requests.forEach(req => {
-      devLog('[handleLocationTrackingUpdate] Processing request:', req);
-      if (req.status === 'pending') {
-        activeLocationRequests.add(req.target_id);
-      } else if (req.status === 'active') {
-        activeLocationTracking.add(req.target_id);
-      }
-    });
-  }
-  
-  devLog('[handleLocationTrackingUpdate] Updated state:');
-  devLog('  activeLocationRequests:', Array.from(activeLocationRequests));
-  devLog('  activeLocationTracking:', Array.from(activeLocationTracking));
-  
-  // Log changes
-  const requestChanges = [...activeLocationRequests].filter(x => !prevRequests.has(x)).concat([...prevRequests].filter(x => !activeLocationRequests.has(x)));
-  const trackingChanges = [...activeLocationTracking].filter(x => !prevTracking.has(x)).concat([...prevTracking].filter(x => !activeLocationTracking.has(x)));
-  if (requestChanges.length > 0) devLog('[handleLocationTrackingUpdate] Request changes:', requestChanges);
-  if (trackingChanges.length > 0) devLog('[handleLocationTrackingUpdate] Tracking changes:', trackingChanges);
-}
+// Old location request system removed
 
 setInterval(() => {
   if (currentUserId) {
     refreshRequests();
     refreshFriends();
-    refreshLocationRequests();
     checkLocationRequests();
-    updateLocationTrackingStatus();
     checkAdminNotifications();
   }
 }, 5000);
