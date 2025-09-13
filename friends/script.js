@@ -189,6 +189,11 @@ function initializeWebSocket() {
     showNotification('Admin: ' + data.message, 'info');
   });
   
+  socket.on('friend_stopped_sharing', (data) => {
+    devLog('[WebSocket] Friend stopped sharing:', data);
+    removeFriendBlip(data.friend_id, data.blip_id);
+  });
+  
   socket.on('force_reload', (data) => {
     devLog('[WebSocket] Force reload received');
     showNotification('System update - reloading...', 'info', true);
