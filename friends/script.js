@@ -85,6 +85,7 @@ function initializeWebSocket() {
         refreshFriends();
         refreshLocationRequests();
         updateLocationTrackingStatus();
+        showNotification('Server back online', 'success', true);
         serverRestartDetected = false;
         suppressOfflineNotifications = false;
       }, 5000);
@@ -217,6 +218,7 @@ function initializeWebSocket() {
     devLog('[WebSocket] Server restart detected, suppressing offline notifications');
     serverRestartDetected = true;
     suppressOfflineNotifications = true;
+    showNotification('Server restarting...', 'info', true);
   });
   
   socket.on('admin_notification', (data) => {
