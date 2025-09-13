@@ -332,6 +332,18 @@ function toggleGPS() {
   });
 }
 
+function toggleLocationSharing() {
+  devLog('[toggleLocationSharing] Called, current state:', locationSharingEnabled);
+  locationSharingEnabled = !locationSharingEnabled;
+  localStorage.setItem('locationSharingEnabled', locationSharingEnabled);
+  document.getElementById('shareToggle').textContent = locationSharingEnabled ? '📍' : '📏';
+  devLog('[toggleLocationSharing] New state:', locationSharingEnabled);
+  
+  if (socket && socket.connected) {
+    socket.emit('set_location_sharing', { user_id: currentUserId, enabled: locationSharingEnabled });
+  }
+}
+
 function setFriendName(friendId, customName) {
   if (!currentUserId) return;
   
@@ -396,117 +408,27 @@ function editFriendName(friendId) {
 
 
 
-let toggleCooldown = new Set();
-
-async function toggleLocationRequest(friendId) {
-  devLog('[toggleLocationRequest] Called for friendId:', friendId);
-  if (!currentUserId) {
-    devLog('[toggleLocationRequest] No currentUserId, returning');
-    return;
-  }
-  
-  // Prevent spam clicking
-  if (toggleCooldown.has(friendId)) {
-    devLog('[toggleLocationRequest] Cooldown active for friendId:', friendId);
-    return;
-  }
-  
-  const hasRequest = activeLocationRequests.has(String(friendId));
-  const isActiveTracking = activeLocationTracking.has(String(friendId));
-  const willActivate = !(hasRequest || isActiveTracking);
-  
-  // Add cooldown
-  toggleCooldown.add(friendId);
-  setTimeout(() => toggleCooldown.delete(friendId), 2000);
-  
-  if (socket && socket.connected) {
-    devLog('[toggleLocationRequest] Using WebSocket');
-    
-    // Immediately update UI state for instant feedback
-    if (willActivate) {
-      activeLocationRequests.add(String(friendId));
-    } else {
-      activeLocationRequests.delete(String(friendId));
-      activeLocationTracking.delete(String(friendId));
-      waypointNotificationShown.delete(String(friendId));
-    }
-    updateFriendsWindow();
-    
-    socket.emit('toggle_location_tracking', { requester_id: currentUserId, target_id: friendId, active: willActivate });
-    
-    // Remove friend blip when stopping location tracking
-    if (!willActivate) {
-      removeFriendBlip(friendId);
-    }
-    return;
-  }
-  
-  // WebSocket not connected
-  devLog('[toggleLocationRequest] WebSocket not connected');
-  showNotification('WebSocket not connected', 'error');
-}
-
-let activeLocationSharing = new Set();
-let acceptedLocationRequests = new Set();
+// Location sharing is now automatic when enabled
 
 function startLocationSharing() {
   devLog('[startLocationSharing] Starting location sharing interval');
   setInterval(async () => {
-    if (currentUserId && acceptedLocationRequests.size > 0) {
-      devLog('[startLocationSharing] Requesting location data once, accepted requests:', Array.from(acceptedLocationRequests));
-      // Request current location from game ONCE per interval
-      if (window.parent && window.parent !== window && !window.pendingAutoShare) {
+    if (currentUserId && locationSharingEnabled) {
+      devLog('[startLocationSharing] Broadcasting location to friends');
+      if (window.parent && window.parent !== window && !window.pendingBroadcast) {
         window.parent.postMessage({ 
           type: 'getNamedData', 
           keys: ['pos_x', 'pos_y']
         }, '*');
-        window.pendingAutoShare = true;
+        window.pendingBroadcast = true;
       }
     }
-  }, 5000);
+  }, 2000);
 }
 
 startLocationSharing();
 
-function shareLocationData(locationData, requesterId) {
-  devLog('[shareLocationData] Sharing location with requesterId:', requesterId, 'data:', locationData);
-  
-  if (socket && socket.connected) {
-    devLog('[shareLocationData] Using WebSocket');
-    socket.emit('share_location', {
-      sharer_id: currentUserId,
-      requester_id: requesterId,
-      location: locationData
-    });
-    return;
-  }
-  
-  devLog('[shareLocationData] Using HTTP fallback');
-  const requestBody = { 
-    sharer_id: currentUserId, 
-    requester_id: requesterId,
-    location: locationData
-  };
-  devLog('[shareLocationData] Request body:', requestBody);
-  
-  fetch(API_BASE + '/location/share', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody)
-  }).then(response => {
-    devLog('[shareLocationData] Response status:', response.status);
-    if (!response.ok && response.status === 400) {
-      devLog('[shareLocationData] 400 error - removing from acceptedLocationRequests:', requesterId);
-      acceptedLocationRequests.delete(requesterId);
-      return;
-    }
-    return response.json();
-  }).then(result => {
-    if (result) devLog('[shareLocationData] Success result:', result);
-  }).catch(error => {
-    devLog('[shareLocationData] Error:', error);
-  });
-}
+// Location sharing now handled by broadcast_location event
 
 let waypointNotificationShown = new Set();
 let friendBlips = new Map(); // Track active friend blips
@@ -550,6 +472,7 @@ function updateFriendBlip(friendId, friendName, x, y) {
   if (!window.parent || window.parent === window) return;
   
   const blipId = `friend_${friendId}`;
+  const color = getFriendColor(friendId);
   
   if (friendBlips.has(friendId)) {
     // Update existing blip position
@@ -569,14 +492,14 @@ function updateFriendBlip(friendId, friendName, x, y) {
       }, '*');
     }
   } else {
-    // Create new friend blip
+    // Create new friend blip with unique color
     window.parent.postMessage({
       type: 'buildBlip',
       id: blipId,
       x: x,
       y: y,
-      sprite: 1, // Default player sprite
-      color: 3, // Green color
+      sprite: 1,
+      color: color,
       alwaysVisible: true,
       route: gpsEnabled,
       ticked: false,
@@ -691,10 +614,12 @@ let friendsData = [];
 let friendsWindowVisible = localStorage.getItem('friendsWindowVisible') === 'true';
 let hideIds = localStorage.getItem('hideIds') === 'true';
 let gpsEnabled = localStorage.getItem('gpsEnabled') === 'true';
+let locationSharingEnabled = localStorage.getItem('locationSharingEnabled') === 'true';
 let lastUpdateTime = Math.floor(Date.now() / 1000);
 let cached_players = [];
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
 let friendsWindow = document.getElementById('friendsWindow');
+let friendColors = new Map(); // Track friend colors
 
 // Set initial button states
 setTimeout(() => {
@@ -707,10 +632,12 @@ setTimeout(() => {
   if (document.getElementById('gpsToggle')) {
     document.getElementById('gpsToggle').textContent = gpsEnabled ? '🧭' : '🗺️';
   }
+  if (document.getElementById('shareToggle')) {
+    document.getElementById('shareToggle').textContent = locationSharingEnabled ? '📍' : '📏';
+  }
   friendsWindow = document.getElementById('friendsWindow');
 }, 100);
 let previousOnlineFriends = new Set();
-let activeLocationRequests = new Set();
 let suppressOfflineNotifications = false;
 let serverRestartDetected = false;
 
@@ -789,6 +716,15 @@ function handleFriendsUpdate(newFriendsData) {
   updateFriendsWindow();
 }
 
+function getFriendColor(friendId) {
+  if (!friendColors.has(friendId)) {
+    const colors = [1, 2, 3, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+    const colorIndex = parseInt(friendId) % colors.length;
+    friendColors.set(friendId, colors[colorIndex]);
+  }
+  return friendColors.get(friendId);
+}
+
 function updateFriendsWindow() {
   devLog('[updateFriendsWindow] Called, visible:', friendsWindowVisible, 'friends count:', friendsData.length);
   if (!friendsWindowVisible) {
@@ -816,14 +752,19 @@ function updateFriendsWindow() {
     const sessionDuration = getConnectedSeconds(friend);
     const timeStr = formatSeconds(sessionDuration);
     const betaIndicator = friend.server === 'njyvop' ? ' [BETA]' : '';
-    const hasRequest = activeLocationRequests.has(friend.friend_id);
-    const isActive = activeLocationTracking.has(friend.friend_id);
-    const buttonStyle = isActive ? 'background: #43a047; color: white;' : (hasRequest ? 'background: #ffa500; color: white;' : 'background: #5865f2; color: white;');
-    const buttonText = isActive ? '📍✓' : (hasRequest ? '📍⏳' : '📍');
     const idText = hideIds ? '' : ' (ID: ' + friend.friend_id + ')';
     const spanStyle = hideIds ? 'flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' : 'flex: 1;';
-    devLog('[updateFriendsWindow] Friend', friend.name, '- hasRequest:', hasRequest, 'isActive:', isActive);
-    return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span style="' + spanStyle + '">' + friend.name + idText + betaIndicator + ' (' + timeStr + ')</span><button onclick="toggleLocationRequest(' + friend.friend_id + ')" style="' + buttonStyle + ' border: none; border-radius: 3px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer; flex-shrink: 0; margin-left: 5px;">' + buttonText + '</button></div>';
+    
+    // Show colored dot if friend is sharing location, nothing if not
+    let locationIndicator = '';
+    if (friend.sharing_location) {
+      const color = getFriendColor(friend.friend_id);
+      const colorMap = {1:'red',2:'green',3:'blue',5:'yellow',6:'purple',7:'orange',8:'pink',9:'brown',11:'cyan',12:'lime',13:'gold',14:'silver',15:'maroon',16:'navy',17:'olive',18:'teal',19:'gray',20:'magenta'};
+      const colorName = colorMap[color] || 'white';
+      locationIndicator = '<span style="color: ' + colorName + '; font-size: 1rem; margin-left: 5px;">●</span>';
+    }
+    
+    return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span style="' + spanStyle + '">' + friend.name + idText + betaIndicator + ' (' + timeStr + ')' + locationIndicator + '</span></div>';
   }).join('');
   
   friendsWindow.innerHTML = header + friendsList;
@@ -969,20 +910,11 @@ window.addEventListener('message', (event) => {
       pos_y: payload.pos_y
     };
     
-    // Handle one-time location share
-    if (window.pendingLocationShare) {
-      devLog('[message] Location data received for one-time share:', locationData, 'to:', window.pendingLocationShare);
-      shareLocationData(locationData, window.pendingLocationShare);
-      window.pendingLocationShare = null;
-    }
-    
-    // Handle automatic location sharing for accepted requests
-    if (window.pendingAutoShare && acceptedLocationRequests.size > 0) {
-      devLog('[message] Location data received for auto-share:', locationData, 'to:', Array.from(acceptedLocationRequests));
-      acceptedLocationRequests.forEach(requesterId => {
-        shareLocationData(locationData, requesterId);
-      });
-      window.pendingAutoShare = false;
+    // Broadcast location to all friends if sharing is enabled
+    if (window.pendingBroadcast && locationSharingEnabled && socket && socket.connected) {
+      devLog('[message] Broadcasting location to friends:', locationData);
+      socket.emit('broadcast_location', { user_id: currentUserId, location: locationData });
+      window.pendingBroadcast = false;
     }
   }
 });
