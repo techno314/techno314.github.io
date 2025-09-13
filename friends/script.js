@@ -696,6 +696,7 @@ function handleFriendRequestsUpdate(requests) {
 
 let friendsData = [];
 let friendsWindowVisible = localStorage.getItem('friendsWindowVisible') === 'true';
+let hideIds = localStorage.getItem('hideIds') === 'true';
 let lastUpdateTime = Math.floor(Date.now() / 1000);
 let cached_players = [];
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
@@ -705,6 +706,9 @@ let friendsWindow = document.getElementById('friendsWindow');
 setTimeout(() => {
   if (document.getElementById('soundToggle')) {
     document.getElementById('soundToggle').textContent = soundEnabled ? '🔊' : '🔇';
+  }
+  if (document.getElementById('hideIdsToggle')) {
+    document.getElementById('hideIdsToggle').textContent = hideIds ? '🙈' : '👁️';
   }
   friendsWindow = document.getElementById('friendsWindow');
 }, 100);
@@ -839,8 +843,9 @@ function updateFriendsWindow() {
     const isActive = activeLocationTracking.has(friend.friend_id);
     const buttonStyle = isActive ? 'background: #43a047; color: white;' : (hasRequest ? 'background: #ffa500; color: white;' : 'background: #5865f2; color: white;');
     const buttonText = isActive ? '📍✓' : (hasRequest ? '📍⏳' : '📍');
+    const idText = hideIds ? '' : ' (ID: ' + friend.friend_id + ')';
     devLog('[updateFriendsWindow] Friend', friend.name, '- hasRequest:', hasRequest, 'isActive:', isActive);
-    return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span>' + friend.name + ' (ID: ' + friend.friend_id + ')' + betaIndicator + ' (' + timeStr + ')</span><button onclick="toggleLocationRequest(' + friend.friend_id + ')" style="' + buttonStyle + ' border: none; border-radius: 3px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer;">' + buttonText + '</button></div>';
+    return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span>' + friend.name + idText + betaIndicator + ' (' + timeStr + ')</span><button onclick="toggleLocationRequest(' + friend.friend_id + ')" style="' + buttonStyle + ' border: none; border-radius: 3px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer;">' + buttonText + '</button></div>';
   }).join('');
   
   friendsWindow.innerHTML = header + friendsList;
@@ -851,6 +856,15 @@ function toggleFriendsWindow() {
   friendsWindowVisible = !friendsWindowVisible;
   localStorage.setItem('friendsWindowVisible', friendsWindowVisible);
   devLog('[toggleFriendsWindow] New state:', friendsWindowVisible);
+  updateFriendsWindow();
+}
+
+function toggleIds() {
+  hideIds = !hideIds;
+  localStorage.setItem('hideIds', hideIds);
+  if (document.getElementById('hideIdsToggle')) {
+    document.getElementById('hideIdsToggle').textContent = hideIds ? '🙈' : '👁️';
+  }
   updateFriendsWindow();
 }
 
