@@ -1,4 +1,4 @@
-const API_BASE = 'http://192.168.1.88:8022';
+const API_BASE = 'https://api.grayflare.space';
 let currentUserId = '';
 let devMode = false;
 let socket = null;
