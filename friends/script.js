@@ -77,6 +77,18 @@ function initializeWebSocket() {
       refreshLocationRequests();
       updateLocationTrackingStatus();
     }
+    // Reset restart detection and refresh all data after reconnection
+    if (serverRestartDetected) {
+      setTimeout(() => {
+        devLog('[WebSocket] Refreshing all data after server restart');
+        refreshRequests();
+        refreshFriends();
+        refreshLocationRequests();
+        updateLocationTrackingStatus();
+        serverRestartDetected = false;
+        suppressOfflineNotifications = false;
+      }, 5000);
+    }
   });
   
   socket.on('disconnect', (reason) => {
@@ -199,6 +211,12 @@ function initializeWebSocket() {
         }, '*');
       }
     }
+  });
+  
+  socket.on('server_restarting', (data) => {
+    devLog('[WebSocket] Server restart detected, suppressing offline notifications');
+    serverRestartDetected = true;
+    suppressOfflineNotifications = true;
   });
   
   socket.on('admin_notification', (data) => {
@@ -751,6 +769,7 @@ setTimeout(() => {
 let previousOnlineFriends = new Set();
 let activeLocationRequests = new Set();
 let suppressOfflineNotifications = false;
+let serverRestartDetected = false;
 
 function formatSeconds(seconds) {
   const hrs = Math.floor(seconds / 3600);
@@ -825,8 +844,8 @@ function handleFriendsUpdate(newFriendsData) {
       }
     });
     
-    // Check for friends who went offline (but not if we're suppressing notifications due to friend removal)
-    if (!suppressOfflineNotifications) {
+    // Check for friends who went offline (but not if we're suppressing notifications due to friend removal or server restart)
+    if (!suppressOfflineNotifications && !serverRestartDetected) {
       previousOnlineFriends.forEach(friendId => {
         if (!currentOnlineFriends.has(friendId)) {
           const friend = friendsData.find(f => f.friend_id === friendId);
