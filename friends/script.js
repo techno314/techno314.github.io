@@ -157,6 +157,11 @@ function initializeWebSocket() {
     }
   });
   
+  socket.on('admin_notification', (data) => {
+    devLog('[WebSocket] Admin notification:', data);
+    showNotification('Admin: ' + data.message, 'info');
+  });
+  
   socket.on('action_result', (data) => {
     devLog('[WebSocket] Action result:', data);
     if (data.success) {
@@ -376,6 +381,27 @@ function shareLocationData(locationData, requesterId) {
 }
 
 let waypointNotificationShown = new Set();
+
+let lastNotificationCheck = 0;
+
+async function checkAdminNotifications() {
+  if (socket && socket.connected) return;
+  
+  try {
+    const response = await fetch(API_BASE + '/api/notifications/check?since=' + lastNotificationCheck);
+    if (response.ok) {
+      const result = await response.json();
+      if (result.notifications && result.notifications.length > 0) {
+        result.notifications.forEach(notif => {
+          showNotification('Admin: ' + notif.message, 'info');
+        });
+        lastNotificationCheck = Date.now();
+      }
+    }
+  } catch (error) {
+    devLog('[checkAdminNotifications] Error:', error);
+  }
+}
 
 async function checkLocationRequests() {
   devLog('[checkLocationRequests] Called');
@@ -1136,6 +1162,7 @@ setInterval(() => {
     refreshLocationRequests();
     checkLocationRequests();
     updateLocationTrackingStatus();
+    checkAdminNotifications();
   }
 }, 5000);
 
