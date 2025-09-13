@@ -54,10 +54,6 @@ function initializeWebSocket() {
       if (!socket || !socket.connected) {
         devLog('[initializeWebSocket] WebSocket timeout, starting HTTP fallback');
         isConnecting = false;
-        refreshRequests();
-        refreshFriends();
-        refreshLocationRequests();
-        updateLocationTrackingStatus();
       }
     }, 10000);
   } catch (error) {
@@ -71,20 +67,11 @@ function initializeWebSocket() {
     isConnecting = false;
     if (currentUserId) {
       socket.emit('join_user', { user_id: currentUserId });
-      // Refresh all data when WebSocket connects
-      refreshRequests();
-      refreshFriends();
-      refreshLocationRequests();
-      updateLocationTrackingStatus();
     }
-    // Reset restart detection and refresh all data after reconnection
+    // Reset restart detection after reconnection
     if (serverRestartDetected) {
       setTimeout(() => {
-        devLog('[WebSocket] Refreshing all data after server restart');
-        refreshRequests();
-        refreshFriends();
-        refreshLocationRequests();
-        updateLocationTrackingStatus();
+        devLog('[WebSocket] Server back online after restart');
         showNotification('Server back online', 'success', true);
         serverRestartDetected = false;
         suppressOfflineNotifications = false;
@@ -158,7 +145,6 @@ function initializeWebSocket() {
   socket.on('location_request_received', (data) => {
     devLog('[WebSocket] New location request received:', data);
     refreshLocationRequests();
-    showNotification('New location tracking request!', 'info');
   });
   
   socket.on('location_request_cancelled', (data) => {
