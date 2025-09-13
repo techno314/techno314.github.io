@@ -1,4 +1,12 @@
-const API_BASE = 'https://api.grayflare.space';
+// Environment detection to prevent wrong API usage
+const API_BASE = (() => {
+  const hostname = window.location.hostname;
+  if (hostname === 'localhost' || hostname.startsWith('192.168.') || hostname.startsWith('127.')) {
+    console.error('CRITICAL: Production script running on local environment!');
+    return 'http://192.168.1.88:8022'; // Dev server
+  }
+  return 'https://api.grayflare.space'; // Live server
+})();
 let currentUserId = '';
 let devMode = false;
 let socket = null;
@@ -85,6 +93,12 @@ function initializeWebSocket() {
   
   socket.on('connect_error', (error) => {
     devLog('[WebSocket] Connection error:', error);
+    // Check if we're trying to connect to unreachable local server
+    if (API_BASE.includes('192.168.') && !window.location.hostname.includes('192.168.')) {
+      console.error('CRITICAL: Trying to connect to local dev server from production!');
+      showNotification('Connection error - please refresh page', 'error');
+      return; // Stop reconnection attempts
+    }
     // Reset socket and try reconnecting
     setTimeout(() => {
       if (!socket || !socket.connected) {
