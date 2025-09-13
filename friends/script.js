@@ -3,13 +3,19 @@ let currentUserId = '';
 let devMode = false;
 let socket = null;
 let useWebSocket = true; // WebSocket enabled by default, HTTP as fallback
+let isConnecting = false;
+let reconnectTimeout = null;
 
 function devLog(...args) {
   if (devMode) console.log(...args);
 }
 
 function initializeWebSocket() {
-  if (socket) return;
+  // Prevent multiple simultaneous connection attempts
+  if (socket && (socket.connected || isConnecting)) {
+    devLog('[initializeWebSocket] Already connected or connecting, skipping');
+    return;
+  }
   
   // Check if Socket.IO is available
   if (typeof io === 'undefined') {
@@ -18,21 +24,36 @@ function initializeWebSocket() {
     return;
   }
   
+  // Clean up existing socket
+  if (socket) {
+    devLog('[initializeWebSocket] Cleaning up existing socket');
+    socket.removeAllListeners();
+    socket.disconnect();
+    socket = null;
+  }
+  
+  // Clear any pending reconnect
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  
+  isConnecting = true;
   devLog('[initializeWebSocket] Connecting to WebSocket');
+  
   try {
     socket = io(API_BASE, {
       transports: ['websocket', 'polling'],
       timeout: 10000,
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: 5000
+      reconnection: false, // Disable auto-reconnection to handle manually
+      forceNew: true // Force new connection
     });
     
     // Fallback to HTTP if WebSocket doesn't connect within 10 seconds
     setTimeout(() => {
       if (!socket || !socket.connected) {
         devLog('[initializeWebSocket] WebSocket timeout, starting HTTP fallback');
+        isConnecting = false;
         refreshRequests();
         refreshFriends();
         refreshLocationRequests();
@@ -41,11 +62,13 @@ function initializeWebSocket() {
     }, 10000);
   } catch (error) {
     devLog('[initializeWebSocket] Failed to create socket:', error);
+    isConnecting = false;
     return;
   }
   
   socket.on('connect', () => {
     devLog('[WebSocket] Connected successfully');
+    isConnecting = false;
     if (currentUserId) {
       socket.emit('join_user', { user_id: currentUserId });
       // Refresh all data when WebSocket connects
@@ -58,27 +81,40 @@ function initializeWebSocket() {
   
   socket.on('disconnect', (reason) => {
     devLog('[WebSocket] Disconnected:', reason);
-    if (useWebSocket) {
-      setTimeout(() => {
+    isConnecting = false;
+    
+    // Only attempt reconnection for unexpected disconnects
+    if (useWebSocket && reason !== 'io client disconnect') {
+      // Clear any existing reconnect timeout
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      
+      reconnectTimeout = setTimeout(() => {
         if (!socket || !socket.connected) {
-          devLog('[WebSocket] Attempting reconnection...');
-          socket = null; // Reset socket before reconnecting
+          devLog('[WebSocket] Attempting reconnection after disconnect...');
           initializeWebSocket();
         }
-      }, 3000);
+      }, 5000); // Increased delay to prevent spam
     }
   });
   
   socket.on('connect_error', (error) => {
     devLog('[WebSocket] Connection error:', error);
-    // Reset socket and try reconnecting
-    setTimeout(() => {
+    isConnecting = false;
+    
+    // Clear any existing reconnect timeout
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+    }
+    
+    // Only retry a limited number of times
+    reconnectTimeout = setTimeout(() => {
       if (!socket || !socket.connected) {
-        devLog('[WebSocket] Connection failed, resetting and retrying...');
-        socket = null;
+        devLog('[WebSocket] Retrying connection after error...');
         initializeWebSocket();
       }
-    }, 2000);
+    }, 5000); // Increased delay
   });
   
   socket.on('friends_update', (data) => {
