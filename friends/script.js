@@ -442,17 +442,17 @@ function handleReceivedLocationsUpdate(locations) {
   }
 }
 
-function updateFriendBlip(friendId, friendName, x, y) {
+function updateFriendBlip(friendId, friendName, x, y, blipId) {
   if (!window.parent || window.parent === window) return;
   
-  const blipId = `friend_${friendId}`;
+  const actualBlipId = blipId || `friend_${friendId}`;
   const color = getFriendColor(friendId);
   
   if (friendBlips.has(friendId)) {
     // Update existing blip position
     window.parent.postMessage({
       type: 'setBlipPosition',
-      id: blipId,
+      id: actualBlipId,
       x: x,
       y: y
     }, '*');
@@ -461,7 +461,7 @@ function updateFriendBlip(friendId, friendName, x, y) {
     if (gpsEnabled) {
       window.parent.postMessage({
         type: 'setBlipRoute',
-        id: blipId,
+        id: actualBlipId,
         route: true
       }, '*');
     }
@@ -469,7 +469,7 @@ function updateFriendBlip(friendId, friendName, x, y) {
     // Create new friend blip with unique color
     window.parent.postMessage({
       type: 'buildBlip',
-      id: blipId,
+      id: actualBlipId,
       x: x,
       y: y,
       sprite: 1,
@@ -479,17 +479,17 @@ function updateFriendBlip(friendId, friendName, x, y) {
       ticked: false,
       name: friendName || `Friend ${friendId}`
     }, '*');
-    friendBlips.set(friendId, { name: friendName, x: x, y: y });
+    friendBlips.set(friendId, { name: friendName, x: x, y: y, blipId: actualBlipId });
   }
 }
 
-function removeFriendBlip(friendId) {
+function removeFriendBlip(friendId, blipId) {
   if (!window.parent || window.parent === window) return;
   
-  const blipId = `friend_${friendId}`;
+  const actualBlipId = blipId || friendBlips.get(friendId)?.blipId || `friend_${friendId}`;
   window.parent.postMessage({
     type: 'removeBlip',
-    id: blipId
+    id: actualBlipId
   }, '*');
   friendBlips.delete(friendId);
 }
@@ -652,6 +652,17 @@ function handleFriendsUpdate(newFriendsData) {
     newFriendsData = [];
   }
   
+  // Remove blips for friends who stopped sharing location
+  if (friendsData.length > 0) {
+    friendsData.forEach(oldFriend => {
+      const newFriend = newFriendsData.find(f => f.friend_id === oldFriend.friend_id);
+      if (oldFriend.sharing_location && (!newFriend || !newFriend.sharing_location)) {
+        devLog('[handleFriendsUpdate] Friend stopped sharing:', oldFriend.name);
+        removeFriendBlip(oldFriend.friend_id, oldFriend.blip_id);
+      }
+    });
+  }
+  
   // Check for friend join/leave notifications
   if (friendsData.length > 0) {
     const currentOnlineFriends = new Set(newFriendsData.filter(f => f.online).map(f => f.friend_id));
@@ -731,11 +742,13 @@ function updateFriendsWindow() {
     
     // Show colored dot if friend is sharing location, nothing if not
     let locationIndicator = '';
+    devLog('[updateFriendsWindow] Friend', friend.name, 'sharing_location:', friend.sharing_location);
     if (friend.sharing_location) {
       const color = getFriendColor(friend.friend_id);
       const colorMap = {1:'red',2:'green',3:'blue',5:'yellow',6:'purple',7:'orange',8:'pink',9:'brown',11:'cyan',12:'lime',13:'gold',14:'silver',15:'maroon',16:'navy',17:'olive',18:'teal',19:'gray',20:'magenta'};
       const colorName = colorMap[color] || 'white';
       locationIndicator = '<span style="color: ' + colorName + '; font-size: 1rem; margin-left: 5px;">●</span>';
+      devLog('[updateFriendsWindow] Added location indicator for', friend.name, 'color:', colorName);
     }
     
     return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span style="' + spanStyle + '">' + friend.name + idText + betaIndicator + ' (' + timeStr + ')' + locationIndicator + '</span></div>';
