@@ -6,12 +6,24 @@ let useWebSocket = true; // WebSocket enabled by default, HTTP as fallback
 let lastMaintenanceNotification = null;
 let lastStartupNotification = null;
 
+// Circuit breaker to prevent connection spam
+let connectionFailures = 0;
+let circuitBreakerOpen = false;
+const MAX_FAILURES = 10;
+const CIRCUIT_RESET_TIME = 60000; // 1 minute
+
 function devLog(...args) {
   if (devMode) console.log(...args);
 }
 
 function initializeWebSocket() {
   if (socket) return;
+  
+  // Circuit breaker check
+  if (circuitBreakerOpen) {
+    devLog('[initializeWebSocket] Circuit breaker open, skipping connection attempt');
+    return;
+  }
   
   // Check if Socket.IO is available
   if (typeof io === 'undefined') {
@@ -48,6 +60,7 @@ function initializeWebSocket() {
   
   socket.on('connect', () => {
     devLog('[WebSocket] Connected successfully');
+    connectionFailures = 0; // Reset failure count on successful connection
     
     // Check if this is a reconnection after disconnect
     if (lastDisconnectTime && Date.now() - lastDisconnectTime < 60000) {
@@ -85,14 +98,32 @@ function initializeWebSocket() {
   
   socket.on('connect_error', (error) => {
     devLog('[WebSocket] Connection error:', error);
-    // Reset socket and try reconnecting
+    connectionFailures++;
+    
+    // Open circuit breaker if too many failures
+    if (connectionFailures >= MAX_FAILURES) {
+      circuitBreakerOpen = true;
+      devLog('[WebSocket] Circuit breaker opened due to repeated failures');
+      showNotification('Connection issues - switching to HTTP mode', 'error');
+      
+      // Reset circuit breaker after timeout
+      setTimeout(() => {
+        circuitBreakerOpen = false;
+        connectionFailures = 0;
+        devLog('[WebSocket] Circuit breaker reset');
+      }, CIRCUIT_RESET_TIME);
+      return;
+    }
+    
+    // Reset socket and try reconnecting with exponential backoff
+    const delay = Math.min(2000 * Math.pow(2, connectionFailures - 1), 30000);
     setTimeout(() => {
       if (!socket || !socket.connected) {
         devLog('[WebSocket] Connection failed, resetting and retrying...');
         socket = null;
         initializeWebSocket();
       }
-    }, 2000);
+    }, delay);
   });
   
   socket.on('friends_update', (data) => {
