@@ -308,6 +308,25 @@ function toggleSound() {
   devLog('[toggleSound] New state:', soundEnabled);
 }
 
+function toggleGPS() {
+  devLog('[toggleGPS] Called, current state:', gpsEnabled);
+  gpsEnabled = !gpsEnabled;
+  localStorage.setItem('gpsEnabled', gpsEnabled);
+  document.getElementById('gpsToggle').textContent = gpsEnabled ? '🧭' : '🗺️';
+  devLog('[toggleGPS] New state:', gpsEnabled);
+  
+  // Update all existing friend blips
+  friendBlips.forEach((blipData, friendId) => {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({
+        type: 'setBlipRoute',
+        id: `friend_${friendId}`,
+        route: gpsEnabled
+      }, '*');
+    }
+  });
+}
+
 function setFriendName(friendId, customName) {
   if (!currentUserId) return;
   
@@ -409,6 +428,11 @@ async function toggleLocationRequest(friendId) {
     updateFriendsWindow();
     
     socket.emit('toggle_location_tracking', { requester_id: currentUserId, target_id: friendId, active: willActivate });
+    
+    // Remove friend blip when stopping location tracking
+    if (!willActivate) {
+      removeFriendBlip(friendId);
+    }
     return;
   }
   
@@ -480,6 +504,7 @@ function shareLocationData(locationData, requesterId) {
 }
 
 let waypointNotificationShown = new Set();
+let friendBlips = new Map(); // Track active friend blips
 
 let lastNotificationCheck = 0;
 
@@ -508,18 +533,54 @@ function handleReceivedLocationsUpdate(locations) {
   if (locations && locations.length > 0) {
     devLog('[handleReceivedLocationsUpdate] Processing', locations.length, 'locations');
     locations.forEach(loc => {
-      devLog('[handleReceivedLocationsUpdate] Setting waypoint from:', loc.sharer_name, 'at:', loc.pos_x, loc.pos_y);
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ 
-          type: 'setWaypoint', 
-          x: loc.pos_x, 
-          y: loc.pos_y 
-        }, '*');
-      }
+      devLog('[handleReceivedLocationsUpdate] Updating friend blip for:', loc.sharer_name, 'at:', loc.pos_x, loc.pos_y);
+      updateFriendBlip(loc.sharer_id, loc.sharer_name, loc.pos_x, loc.pos_y);
     });
   } else {
     devLog('[handleReceivedLocationsUpdate] No locations received');
   }
+}
+
+function updateFriendBlip(friendId, friendName, x, y) {
+  if (!window.parent || window.parent === window) return;
+  
+  const blipId = `friend_${friendId}`;
+  
+  if (friendBlips.has(friendId)) {
+    // Update existing blip position
+    window.parent.postMessage({
+      type: 'setBlipPosition',
+      id: blipId,
+      x: x,
+      y: y
+    }, '*');
+  } else {
+    // Create new friend blip
+    window.parent.postMessage({
+      type: 'buildBlip',
+      id: blipId,
+      x: x,
+      y: y,
+      sprite: 1, // Default player sprite
+      color: 3, // Green color
+      alwaysVisible: true,
+      route: gpsEnabled,
+      ticked: false,
+      name: friendName || `Friend ${friendId}`
+    }, '*');
+    friendBlips.set(friendId, { name: friendName, x: x, y: y });
+  }
+}
+
+function removeFriendBlip(friendId) {
+  if (!window.parent || window.parent === window) return;
+  
+  const blipId = `friend_${friendId}`;
+  window.parent.postMessage({
+    type: 'removeBlip',
+    id: blipId
+  }, '*');
+  friendBlips.delete(friendId);
 }
 
 async function sendFriendRequest() {
@@ -615,6 +676,7 @@ function handleFriendRequestsUpdate(requests) {
 let friendsData = [];
 let friendsWindowVisible = localStorage.getItem('friendsWindowVisible') === 'true';
 let hideIds = localStorage.getItem('hideIds') === 'true';
+let gpsEnabled = localStorage.getItem('gpsEnabled') === 'true';
 let lastUpdateTime = Math.floor(Date.now() / 1000);
 let cached_players = [];
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
@@ -627,6 +689,9 @@ setTimeout(() => {
   }
   if (document.getElementById('hideIdsToggle')) {
     document.getElementById('hideIdsToggle').textContent = hideIds ? '🙈' : '👁️';
+  }
+  if (document.getElementById('gpsToggle')) {
+    document.getElementById('gpsToggle').textContent = gpsEnabled ? '🧭' : '🗺️';
   }
   friendsWindow = document.getElementById('friendsWindow');
 }, 100);
