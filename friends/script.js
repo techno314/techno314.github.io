@@ -713,9 +713,6 @@ async function refreshRequests() {
 function handleFriendRequestsUpdate(requests) {
   const requestsList = document.getElementById('requestsList');
   if (requests && requests.length > 0) {
-    if (requests.length > lastRequestCount && lastRequestCount >= 0) {
-      showNotification('New friend request received!', 'info');
-    }
     lastRequestCount = requests.length;
     
     // Get player names for the requests
@@ -727,7 +724,7 @@ function handleFriendRequestsUpdate(requests) {
     }
     
     requestsList.innerHTML = requests.map(req => {
-      const senderName = namesMap[parseInt(req.sender_id)] || 'Unknown';
+      const senderName = req.sender_name || namesMap[parseInt(req.sender_id)] || 'Unknown';
       return '<div class="request-item"><div><strong>' + senderName + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.sender_id + ' • ' + new Date(req.created_at).toUTCString() + '</div></div><div><button onclick="acceptRequest(\'' + req.sender_id + '\')" style="background: #43a047; color: white; border: none; border-radius: 3px; padding: 6px 8px; margin-right: 4px; cursor: pointer;">✓</button><button onclick="declineRequest(\'' + req.sender_id + '\')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">×</button></div></div>';
     }).join('');
   } else {
