@@ -191,15 +191,7 @@ function initializeWebSocket() {
   
   socket.on('location_shared', (data) => {
     devLog('[WebSocket] Location shared:', data);
-    if (data.location && data.location.pos_x && data.location.pos_y) {
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ 
-          type: 'setWaypoint', 
-          x: data.location.pos_x, 
-          y: data.location.pos_y 
-        }, '*');
-      }
-    }
+    // Location sharing handled by received_locations_update event
   });
   
   socket.on('server_restarting', (data) => {
