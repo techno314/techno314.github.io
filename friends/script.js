@@ -844,8 +844,9 @@ function updateFriendsWindow() {
     const buttonStyle = isActive ? 'background: #43a047; color: white;' : (hasRequest ? 'background: #ffa500; color: white;' : 'background: #5865f2; color: white;');
     const buttonText = isActive ? '📍✓' : (hasRequest ? '📍⏳' : '📍');
     const idText = hideIds ? '' : ' (ID: ' + friend.friend_id + ')';
+    const containerStyle = hideIds ? 'display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0; gap: 5px;' : 'display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;';
     devLog('[updateFriendsWindow] Friend', friend.name, '- hasRequest:', hasRequest, 'isActive:', isActive);
-    return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span>' + friend.name + idText + betaIndicator + ' (' + timeStr + ')</span><button onclick="toggleLocationRequest(' + friend.friend_id + ')" style="' + buttonStyle + ' border: none; border-radius: 3px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer;">' + buttonText + '</button></div>';
+    return '<div style="' + containerStyle + '"><span>' + friend.name + idText + betaIndicator + ' (' + timeStr + ')</span><button onclick="toggleLocationRequest(' + friend.friend_id + ')" style="' + buttonStyle + ' border: none; border-radius: 3px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer;">' + buttonText + '</button></div>';
   }).join('');
   
   friendsWindow.innerHTML = header + friendsList;
