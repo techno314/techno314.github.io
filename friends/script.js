@@ -559,6 +559,15 @@ function updateFriendBlip(friendId, friendName, x, y) {
       x: x,
       y: y
     }, '*');
+    
+    // Update GPS routing if enabled
+    if (gpsEnabled) {
+      window.parent.postMessage({
+        type: 'setBlipRoute',
+        id: blipId,
+        route: true
+      }, '*');
+    }
   } else {
     // Create new friend blip
     window.parent.postMessage({
