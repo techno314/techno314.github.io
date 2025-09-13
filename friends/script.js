@@ -162,7 +162,8 @@ function initializeWebSocket() {
   socket.on('friend_request_received', (data) => {
     devLog('[WebSocket] Friend request received:', data);
     refreshRequests();
-    showNotification('New friend request received!', 'info');
+    const senderName = data.sender_name || 'Unknown';
+    showNotification(`Friend request from ${senderName}!`, 'info');
   });
   
   socket.on('friend_request_declined', (data) => {
