@@ -742,13 +742,11 @@ function updateFriendsWindow() {
     
     // Show colored dot if friend is sharing location, nothing if not
     let locationIndicator = '';
-    devLog('[updateFriendsWindow] Friend', friend.name, 'sharing_location:', friend.sharing_location);
     if (friend.sharing_location) {
       const color = getFriendColor(friend.friend_id);
       const colorMap = {1:'red',2:'green',3:'blue',5:'yellow',6:'purple',7:'orange',8:'pink',9:'brown',11:'cyan',12:'lime',13:'gold',14:'silver',15:'maroon',16:'navy',17:'olive',18:'teal',19:'gray',20:'magenta'};
       const colorName = colorMap[color] || 'white';
       locationIndicator = '<span style="color: ' + colorName + '; font-size: 1rem; margin-left: 5px;">●</span>';
-      devLog('[updateFriendsWindow] Added location indicator for', friend.name, 'color:', colorName);
     }
     
     return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span style="' + spanStyle + '">' + friend.name + idText + betaIndicator + ' (' + timeStr + ')' + locationIndicator + '</span></div>';
