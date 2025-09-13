@@ -1309,8 +1309,6 @@ function handleLocationTrackingUpdate(requests) {
   const trackingChanges = [...activeLocationTracking].filter(x => !prevTracking.has(x)).concat([...prevTracking].filter(x => !activeLocationTracking.has(x)));
   if (requestChanges.length > 0) devLog('[handleLocationTrackingUpdate] Request changes:', requestChanges);
   if (trackingChanges.length > 0) devLog('[handleLocationTrackingUpdate] Tracking changes:', trackingChanges);
-  
-  updateFriendsWindow();
 }
 
 setInterval(() => {
@@ -1328,7 +1326,7 @@ setInterval(() => {
   if (friendsWindowVisible) {
     updateFriendsWindow();
   }
-}, 1000);
+}, 5000);
 
 let isDragging = false;
 let isDraggingFriends = false;
