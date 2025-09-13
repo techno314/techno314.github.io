@@ -209,6 +209,12 @@ function initializeWebSocket() {
   socket.on('force_reload', (data) => {
     devLog('[WebSocket] Force reload received');
     showNotification('System update - reloading...', 'info', true);
+    
+    // Clean up all friend blips before reload
+    friendBlips.forEach((blipData, friendId) => {
+      removeFriendBlip(friendId);
+    });
+    
     setTimeout(() => {
       localStorage.setItem('shouldPinAfterReload', 'true');
       window.location.reload();
@@ -553,8 +559,8 @@ function updateFriendBlip(friendId, friendName, x, y) {
       id: blipId,
       x: x,
       y: y,
-      sprite: 480, // Large friend/crew sprite - more distinctive
-      color: 11, // Bright purple - stands out from other blips
+      sprite: 1, // Default player sprite
+      color: 3, // Green color
       alwaysVisible: true,
       route: gpsEnabled,
       ticked: false,
