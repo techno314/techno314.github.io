@@ -553,8 +553,8 @@ function updateFriendBlip(friendId, friendName, x, y) {
       id: blipId,
       x: x,
       y: y,
-      sprite: 1, // Default player sprite
-      color: 3, // Green color
+      sprite: 480, // Large friend/crew sprite - more distinctive
+      color: 11, // Bright purple - stands out from other blips
       alwaysVisible: true,
       route: gpsEnabled,
       ticked: false,
