@@ -431,6 +431,8 @@ async function checkLocationRequests() {
 }
 
 function handleReceivedLocationsUpdate(locations) {
+  if (!blipsEnabled) return;
+  
   if (locations && locations.length > 0) {
     devLog('[handleReceivedLocationsUpdate] Processing', locations.length, 'locations');
     locations.forEach(loc => {
@@ -443,7 +445,7 @@ function handleReceivedLocationsUpdate(locations) {
 }
 
 function updateFriendBlip(friendId, friendName, x, y, blipId) {
-  if (!window.parent || window.parent === window) return;
+  if (!window.parent || window.parent === window || !blipsEnabled) return;
   
   const actualBlipId = blipId || `friend_${friendId}`;
   const color = getFriendColor(friendId);
@@ -589,6 +591,7 @@ let friendsWindowVisible = localStorage.getItem('friendsWindowVisible') === 'tru
 let hideIds = localStorage.getItem('hideIds') === 'true';
 let gpsEnabled = localStorage.getItem('gpsEnabled') === 'true';
 let locationSharingEnabled = localStorage.getItem('locationSharingEnabled') === 'true';
+let blipsEnabled = localStorage.getItem('blipsEnabled') !== 'false';
 let lastUpdateTime = Math.floor(Date.now() / 1000);
 let cached_players = [];
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
@@ -608,6 +611,9 @@ setTimeout(() => {
   }
   if (document.getElementById('shareToggle')) {
     document.getElementById('shareToggle').textContent = locationSharingEnabled ? '📍' : '📏';
+  }
+  if (document.getElementById('blipsToggle')) {
+    document.getElementById('blipsToggle').textContent = blipsEnabled ? '👥' : '🚫';
   }
   friendsWindow = document.getElementById('friendsWindow');
 }, 100);
@@ -744,7 +750,7 @@ function updateFriendsWindow() {
     let locationIndicator = '';
     if (friend.sharing_location) {
       const color = getFriendColor(friend.friend_id);
-      const colorMap = {1:'red',2:'green',3:'blue',5:'yellow',6:'purple',7:'orange',8:'pink',9:'brown',11:'cyan',12:'lime',13:'gold',14:'silver',15:'maroon',16:'navy',17:'olive',18:'teal',19:'gray',20:'magenta'};
+      const colorMap = {1:'red',2:'green',3:'blue',5:'yellow',6:'#ff6b6b',7:'#8b5cf6',8:'pink',9:'#ffa500',11:'#00ff7f',12:'#87ceeb',15:'cyan',17:'orange',20:'#ffd700',21:'#ff8c00',22:'#d3d3d3'};
       const colorName = colorMap[color] || 'white';
       locationIndicator = '<span style="color: ' + colorName + '; font-size: 1rem; margin-left: 5px;">●</span>';
     }
@@ -761,6 +767,21 @@ function toggleFriendsWindow() {
   localStorage.setItem('friendsWindowVisible', friendsWindowVisible);
   devLog('[toggleFriendsWindow] New state:', friendsWindowVisible);
   updateFriendsWindow();
+}
+
+function toggleBlips() {
+  blipsEnabled = !blipsEnabled;
+  localStorage.setItem('blipsEnabled', blipsEnabled);
+  if (document.getElementById('blipsToggle')) {
+    document.getElementById('blipsToggle').textContent = blipsEnabled ? '👥' : '🚫';
+  }
+  
+  if (!blipsEnabled) {
+    // Remove all friend blips when disabled
+    friendBlips.forEach((blipData, friendId) => {
+      removeFriendBlip(friendId);
+    });
+  }
 }
 
 function toggleIds() {
