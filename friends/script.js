@@ -82,8 +82,8 @@ function initializeWebSocket() {
   });
   
   socket.on('friends_update', (data) => {
-    devLog('[WebSocket] Friends update:', data);
-    handleFriendsUpdate(data.friends);
+    devLog('[WebSocket] Friends update received:', data);
+    handleFriendsUpdate(data ? data.friends : []);
   });
   
   socket.on('friend_requests_update', (data) => {
@@ -189,12 +189,20 @@ function initializeWebSocket() {
         document.getElementById('blockStatus').innerHTML = '<span class="status status-online">User blocked!</span>';
         document.getElementById('blockUserId').value = '';
         showNotification('User blocked!', 'success');
+      } else if (data.message.includes('Name updated')) {
+        document.getElementById('nameStatus').innerHTML = '<span class="status status-online">Name updated!</span>';
+        document.getElementById('friendNameId').value = '';
+        document.getElementById('friendCustomName').value = '';
+        showNotification('Friend name updated!', 'success');
+        refreshFriends();
       } else {
         showNotification(data.message, 'success');
       }
     } else {
       if (data.message.includes('Friend request')) {
         document.getElementById('sendStatus').innerHTML = '<span class="status status-error">' + data.message + '</span>';
+      } else if (data.message.includes('Name') || data.message.includes('friends')) {
+        document.getElementById('nameStatus').innerHTML = '<span class="status status-error">' + data.message + '</span>';
       }
       showNotification(data.message, 'error');
     }
@@ -204,6 +212,7 @@ function initializeWebSocket() {
   socket.on('joined', (data) => {
     devLog('[WebSocket] Joined room for user:', data.user_id);
     // Request initial data
+    devLog('[WebSocket] Requesting friends for user:', currentUserId);
     socket.emit('get_friends', { user_id: currentUserId });
     socket.emit('get_friend_requests', { user_id: currentUserId });
     socket.emit('get_location_requests', { user_id: currentUserId });
@@ -244,6 +253,68 @@ function toggleSound() {
   localStorage.setItem('soundEnabled', soundEnabled);
   document.getElementById('soundToggle').textContent = soundEnabled ? '🔊' : '🔇';
   devLog('[toggleSound] New state:', soundEnabled);
+}
+
+function setFriendName(friendId, customName) {
+  if (!currentUserId) return;
+  
+  devLog('[setFriendName] Setting name for friend', friendId, 'to:', customName);
+  
+  if (socket && socket.connected) {
+    socket.emit('set_friend_name', { user_id: currentUserId, friend_id: friendId, custom_name: customName });
+  }
+}
+
+function setFriendNameById() {
+  if (!currentUserId) {
+    document.getElementById('nameStatus').innerHTML = '<span class="status status-error">Set your user ID first</span>';
+    return;
+  }
+  
+  const friendId = document.getElementById('friendNameId').value.trim();
+  const customName = document.getElementById('friendCustomName').value.trim();
+  
+  if (!friendId) {
+    document.getElementById('nameStatus').innerHTML = '<span class="status status-error">Enter friend\'s user ID</span>';
+    return;
+  }
+  
+  setFriendName(friendId, customName);
+}
+
+function editFriendName(friendId) {
+  const friend = friendsData.find(f => f.friend_id == friendId);
+  if (!friend) return;
+  
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = friend.name;
+  input.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; padding: 5px; border: 1px solid #555; background: #2d2d2d; color: white; border-radius: 3px;';
+  
+  let handled = false;
+  
+  input.onkeydown = (e) => {
+    if (handled) return;
+    if (e.key === 'Enter') {
+      handled = true;
+      setFriendName(friendId, input.value.trim());
+      try { input.remove(); } catch(e) {}
+    } else if (e.key === 'Escape') {
+      handled = true;
+      try { input.remove(); } catch(e) {}
+    }
+  };
+  
+  input.onblur = () => {
+    if (handled) return;
+    handled = true;
+    setFriendName(friendId, input.value.trim());
+    try { input.remove(); } catch(e) {}
+  };
+  
+  document.body.appendChild(input);
+  input.focus();
+  input.select();
 }
 
 
@@ -619,12 +690,14 @@ let friendsWindowVisible = localStorage.getItem('friendsWindowVisible') === 'tru
 let lastUpdateTime = Math.floor(Date.now() / 1000);
 let cached_players = [];
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
+let friendsWindow = document.getElementById('friendsWindow');
 
 // Set initial button states
 setTimeout(() => {
   if (document.getElementById('soundToggle')) {
     document.getElementById('soundToggle').textContent = soundEnabled ? '🔊' : '🔇';
   }
+  friendsWindow = document.getElementById('friendsWindow');
 }, 100);
 let previousOnlineFriends = new Set();
 let activeLocationRequests = new Set();
@@ -653,7 +726,7 @@ async function refreshFriends() {
   }
   
   if (socket && socket.connected) {
-    devLog('[refreshFriends] Using WebSocket');
+    devLog('[refreshFriends] Using WebSocket, requesting friends for user:', currentUserId);
     socket.emit('get_friends', { user_id: currentUserId });
     return;
   }
@@ -682,7 +755,11 @@ async function refreshFriends() {
 }
 
 function handleFriendsUpdate(newFriendsData) {
-  devLog('[handleFriendsUpdate] Got', newFriendsData.length, 'friends');
+  devLog('[handleFriendsUpdate] Got', newFriendsData ? newFriendsData.length : 0, 'friends, data:', newFriendsData);
+  
+  if (!newFriendsData) {
+    newFriendsData = [];
+  }
   
   // Check for friend join/leave notifications
   if (friendsData.length > 0) {
@@ -724,8 +801,14 @@ function handleFriendsUpdate(newFriendsData) {
 
 function updateFriendsWindow() {
   devLog('[updateFriendsWindow] Called, visible:', friendsWindowVisible, 'friends count:', friendsData.length);
-  if (!friendsWindowVisible || friendsData.length === 0) {
+  if (!friendsWindowVisible) {
     friendsWindow.style.display = 'none';
+    return;
+  }
+  
+  if (friendsData.length === 0) {
+    friendsWindow.style.display = 'block';
+    friendsWindow.innerHTML = '<div style="font-weight: bold; margin-bottom: 0.5rem;">Friends Online (0)</div><div style="color: #99aab5;">No friends found</div>';
     return;
   }
   
