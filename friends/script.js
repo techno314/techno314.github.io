@@ -3,14 +3,6 @@ let currentUserId = '';
 let devMode = false;
 let socket = null;
 let useWebSocket = true; // WebSocket enabled by default, HTTP as fallback
-let lastMaintenanceNotification = null;
-let lastStartupNotification = null;
-
-// Circuit breaker to prevent connection spam
-let connectionFailures = 0;
-let circuitBreakerOpen = false;
-const MAX_FAILURES = 10;
-const CIRCUIT_RESET_TIME = 60000; // 1 minute
 
 function devLog(...args) {
   if (devMode) console.log(...args);
@@ -18,12 +10,6 @@ function devLog(...args) {
 
 function initializeWebSocket() {
   if (socket) return;
-  
-  // Circuit breaker check
-  if (circuitBreakerOpen) {
-    devLog('[initializeWebSocket] Circuit breaker open, skipping connection attempt');
-    return;
-  }
   
   // Check if Socket.IO is available
   if (typeof io === 'undefined') {
@@ -60,18 +46,6 @@ function initializeWebSocket() {
   
   socket.on('connect', () => {
     devLog('[WebSocket] Connected successfully');
-    connectionFailures = 0; // Reset failure count on successful connection
-    
-    // Check if this is a reconnection after disconnect
-    if (lastDisconnectTime && Date.now() - lastDisconnectTime < 60000) {
-      devLog('[WebSocket] Reconnection detected, enabling grace period');
-      reconnectionGracePeriod = true;
-      setTimeout(() => {
-        reconnectionGracePeriod = false;
-        devLog('[WebSocket] Grace period ended');
-      }, 30000);
-    }
-    
     if (currentUserId) {
       socket.emit('join_user', { user_id: currentUserId });
       // Refresh all data when WebSocket connects
@@ -84,7 +58,6 @@ function initializeWebSocket() {
   
   socket.on('disconnect', (reason) => {
     devLog('[WebSocket] Disconnected:', reason);
-    lastDisconnectTime = Date.now();
     if (useWebSocket) {
       setTimeout(() => {
         if (!socket || !socket.connected) {
@@ -98,40 +71,19 @@ function initializeWebSocket() {
   
   socket.on('connect_error', (error) => {
     devLog('[WebSocket] Connection error:', error);
-    connectionFailures++;
-    
-    // Open circuit breaker if too many failures
-    if (connectionFailures >= MAX_FAILURES) {
-      circuitBreakerOpen = true;
-      devLog('[WebSocket] Circuit breaker opened due to repeated failures');
-      showNotification('Connection issues - switching to HTTP mode', 'error');
-      
-      // Reset circuit breaker after timeout
-      setTimeout(() => {
-        circuitBreakerOpen = false;
-        connectionFailures = 0;
-        devLog('[WebSocket] Circuit breaker reset');
-      }, CIRCUIT_RESET_TIME);
-      return;
-    }
-    
-    // Reset socket and try reconnecting with exponential backoff
-    const delay = Math.min(2000 * Math.pow(2, connectionFailures - 1), 30000);
+    // Reset socket and try reconnecting
     setTimeout(() => {
       if (!socket || !socket.connected) {
         devLog('[WebSocket] Connection failed, resetting and retrying...');
         socket = null;
         initializeWebSocket();
       }
-    }, delay);
+    }, 2000);
   });
   
   socket.on('friends_update', (data) => {
     devLog('[WebSocket] Friends update received:', data);
-    // Suppress friend updates during grace period to prevent offline notifications
-    if (!reconnectionGracePeriod) {
-      handleFriendsUpdate(data ? data.friends : []);
-    }
+    handleFriendsUpdate(data ? data.friends : []);
   });
   
   socket.on('friend_requests_update', (data) => {
@@ -216,29 +168,6 @@ function initializeWebSocket() {
   socket.on('admin_notification', (data) => {
     devLog('[WebSocket] Admin notification:', data);
     showNotification('Admin: ' + data.message, 'info');
-  });
-  
-  socket.on('server_startup', (data) => {
-    devLog('[WebSocket] Server startup event received');
-    serverStartTime = Date.now();
-    if (!lastStartupNotification || Date.now() - lastStartupNotification > 60000) {
-      lastStartupNotification = Date.now();
-      showNotification('Server restarted - notifications suppressed for 30s', 'info', true);
-    }
-  });
-  
-  socket.on('server_maintenance', (data) => {
-    devLog('[WebSocket] Server maintenance notification');
-    if (!lastMaintenanceNotification || Date.now() - lastMaintenanceNotification > 5000) {
-      lastMaintenanceNotification = Date.now();
-      showNotification('Server restarting - please wait...', 'info', true);
-      // Enable grace period immediately when maintenance starts
-      reconnectionGracePeriod = true;
-      setTimeout(() => {
-        reconnectionGracePeriod = false;
-        devLog('[WebSocket] Maintenance grace period ended');
-      }, 45000); // 45 seconds grace period for maintenance
-    }
   });
   
   socket.on('force_reload', (data) => {
@@ -772,9 +701,6 @@ let lastUpdateTime = Math.floor(Date.now() / 1000);
 let cached_players = [];
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
 let friendsWindow = document.getElementById('friendsWindow');
-let serverStartTime = null;
-let lastDisconnectTime = null;
-let reconnectionGracePeriod = false;
 
 // Set initial button states
 setTimeout(() => {
@@ -852,23 +778,19 @@ function handleFriendsUpdate(newFriendsData) {
   if (friendsData.length > 0) {
     const currentOnlineFriends = new Set(newFriendsData.filter(f => f.online).map(f => f.friend_id));
     
-    // Check for friends who came online (suppress during grace period or after server restart)
-    const suppressNotifications = reconnectionGracePeriod || (serverStartTime && Date.now() - serverStartTime < 30000);
-    
+    // Check for friends who came online
     currentOnlineFriends.forEach(friendId => {
       if (!previousOnlineFriends.has(friendId)) {
         const friend = newFriendsData.find(f => f.friend_id === friendId);
         if (friend) {
           devLog('[handleFriendsUpdate] Friend came online:', friend.name);
-          if (!suppressNotifications) {
-            showNotification(friend.name + ' came online', 'success');
-          }
+          showNotification(friend.name + ' came online', 'success');
         }
       }
     });
     
-    // Check for friends who went offline (but not if we're suppressing notifications due to friend removal or grace period)
-    if (!suppressOfflineNotifications && !reconnectionGracePeriod) {
+    // Check for friends who went offline (but not if we're suppressing notifications due to friend removal)
+    if (!suppressOfflineNotifications) {
       previousOnlineFriends.forEach(friendId => {
         if (!currentOnlineFriends.has(friendId)) {
           const friend = friendsData.find(f => f.friend_id === friendId);
