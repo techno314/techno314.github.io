@@ -57,6 +57,14 @@ function initializeWebSocket() {
   
   socket.on('disconnect', (reason) => {
     devLog('[WebSocket] Disconnected:', reason);
+    if (useWebSocket) {
+      setTimeout(() => {
+        if (!socket || !socket.connected) {
+          devLog('[WebSocket] Attempting reconnection...');
+          initializeWebSocket();
+        }
+      }, 10000);
+    }
   });
   
   socket.on('connect_error', (error) => {
