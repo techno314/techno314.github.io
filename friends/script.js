@@ -170,6 +170,11 @@ function initializeWebSocket() {
     showNotification('Admin: ' + data.message, 'info');
   });
   
+  socket.on('server_startup', (data) => {
+    devLog('[WebSocket] Server startup event received');
+    serverStartTime = Date.now();
+  });
+  
   socket.on('force_reload', (data) => {
     devLog('[WebSocket] Force reload received');
     showNotification('System update - reloading...', 'info', true);
@@ -701,6 +706,7 @@ let lastUpdateTime = Math.floor(Date.now() / 1000);
 let cached_players = [];
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
 let friendsWindow = document.getElementById('friendsWindow');
+let serverStartTime = null;
 
 // Set initial button states
 setTimeout(() => {
@@ -778,13 +784,17 @@ function handleFriendsUpdate(newFriendsData) {
   if (friendsData.length > 0) {
     const currentOnlineFriends = new Set(newFriendsData.filter(f => f.online).map(f => f.friend_id));
     
-    // Check for friends who came online
+    // Check for friends who came online (suppress for 30 seconds after server restart)
+    const suppressNotifications = serverStartTime && Date.now() - serverStartTime < 30000;
+    
     currentOnlineFriends.forEach(friendId => {
       if (!previousOnlineFriends.has(friendId)) {
         const friend = newFriendsData.find(f => f.friend_id === friendId);
         if (friend) {
           devLog('[handleFriendsUpdate] Friend came online:', friend.name);
-          showNotification(friend.name + ' came online', 'success');
+          if (!suppressNotifications) {
+            showNotification(friend.name + ' came online', 'success');
+          }
         }
       }
     });
