@@ -22,10 +22,11 @@ function initializeWebSocket() {
   try {
     socket = io(API_BASE, {
       transports: ['websocket', 'polling'],
-      timeout: 5000,
+      timeout: 10000,
       reconnection: true,
-      reconnectionAttempts: 3,
-      reconnectionDelay: 1000
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 5000
     });
     
     // Fallback to HTTP if WebSocket doesn't connect within 10 seconds
@@ -61,24 +62,23 @@ function initializeWebSocket() {
       setTimeout(() => {
         if (!socket || !socket.connected) {
           devLog('[WebSocket] Attempting reconnection...');
+          socket = null; // Reset socket before reconnecting
           initializeWebSocket();
         }
-      }, 10000);
+      }, 3000);
     }
   });
   
   socket.on('connect_error', (error) => {
     devLog('[WebSocket] Connection error:', error);
-    // If WebSocket fails, start HTTP fallback
+    // Reset socket and try reconnecting
     setTimeout(() => {
       if (!socket || !socket.connected) {
-        devLog('[WebSocket] Failed to connect, starting HTTP fallback');
-        refreshRequests();
-        refreshFriends();
-        refreshLocationRequests();
-        updateLocationTrackingStatus();
+        devLog('[WebSocket] Connection failed, resetting and retrying...');
+        socket = null;
+        initializeWebSocket();
       }
-    }, 5000);
+    }, 2000);
   });
   
   socket.on('friends_update', (data) => {
