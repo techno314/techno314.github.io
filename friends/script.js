@@ -11,6 +11,13 @@ function devLog(...args) {
 }
 
 function initializeWebSocket() {
+  // Clean up any stuck friend blips from previous sessions
+  if (window.parent && window.parent !== window) {
+    for (let i = 0; i < 100; i++) {
+      window.parent.postMessage({ type: 'removeBlip', id: `friend_${i}` }, '*');
+    }
+  }
+  
   // Prevent multiple simultaneous connection attempts
   if (socket && (socket.connected || isConnecting)) {
     devLog('[initializeWebSocket] Already connected or connecting, skipping');
