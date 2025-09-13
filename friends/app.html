@@ -48,29 +48,19 @@
     </div>
     
     <div class="user-section">
-      <div class="section-title">Location Requests</div>
-      <div id="locationRequestsList"></div>
-    </div>
-    
-    <div class="user-section">
-      <div class="section-title">Active Friends</div>
+      <div class="section-title">Friends</div>
       <button onclick="toggleFriendsWindow()" style="width: 100%; margin-bottom: 0.3rem; padding: 5px;">Toggle Friends Window</button>
-      
-      <div style="display: flex; gap: 5px; margin-bottom: 0.3rem;">
-        <input type="text" id="removeFriendId" placeholder="Friend's User ID" class="friend-input" style="flex: 1;">
-        <button onclick="removeFriendById()" class="send-inline" style="background: #f44336;">Remove</button>
+      <div style="display: flex; gap: 5px; margin-bottom: 0.2rem;">
+        <input type="text" id="removeFriendId" placeholder="Remove Friend ID" class="friend-input" style="flex: 1;">
+        <button onclick="removeFriendById()" class="send-inline" style="background: #f44336; padding: 3px 6px;">Remove</button>
       </div>
       <div id="removeStatus"></div>
-      
-      <div style="border-top: 1px solid #444; padding-top: 0.3rem; margin-top: 0.3rem;">
-        <div style="font-size: 0.8rem; margin-bottom: 0.2rem;">Set Friend Name (empty = reset)</div>
-        <div style="display: flex; gap: 5px; margin-bottom: 0.2rem;">
-          <input type="text" id="friendNameId" placeholder="Friend ID" class="friend-input" style="flex: 1;">
-          <input type="text" id="friendCustomName" placeholder="Custom name" class="friend-input" style="flex: 1;">
-        </div>
-        <button onclick="setFriendNameById()" class="send-inline" style="width: 100%; padding: 5px;">Set Name</button>
-        <div id="nameStatus"></div>
+      <div style="display: flex; gap: 5px;">
+        <input type="text" id="friendNameId" placeholder="Friend ID" class="friend-input" style="flex: 1;">
+        <input type="text" id="friendCustomName" placeholder="Custom name" class="friend-input" style="flex: 1;">
+        <button onclick="setFriendNameById()" class="send-inline" style="padding: 3px 6px;">Set Name</button>
       </div>
+      <div id="nameStatus"></div>
     </div>
     
     <div class="user-section">
