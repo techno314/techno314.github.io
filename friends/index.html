@@ -7,7 +7,7 @@
 <body>
   <script>
     const timestamp = Date.now();
-    document.write('<script src="app.html?v=' + timestamp + '"><' + '/script>');
+    window.location.href = 'app.html?v=' + timestamp;
   </script>
 </body>
 </html>
