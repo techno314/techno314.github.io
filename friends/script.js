@@ -170,6 +170,12 @@ function initializeWebSocket() {
     showNotification('Admin: ' + data.message, 'info');
   });
   
+  socket.on('force_reload', (data) => {
+    devLog('[WebSocket] Force reload received');
+    showNotification('System update - reloading...', 'info');
+    setTimeout(() => window.location.reload(), 2000);
+  });
+  
   socket.on('action_result', (data) => {
     devLog('[WebSocket] Action result:', data);
     if (data.success) {
