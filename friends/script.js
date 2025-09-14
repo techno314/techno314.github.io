@@ -233,11 +233,17 @@ function initializeWebSocket() {
   
   socket.on('banned', (data) => {
     devLog('[WebSocket] User banned:', data);
-    showNotification(`You have been banned from WebSocket: ${data.reason}`, 'error');
-    // Disconnect but allow reconnection attempts
-    if (socket) {
-      socket.disconnect();
+    const banMessage = `You are banned from WebSocket connections.\nReason: ${data.reason}`;
+    if (data.permanent) {
+      showNotification(banMessage + '\nThis ban is permanent.', 'error', true);
+    } else {
+      showNotification(banMessage, 'error', true);
     }
+  });
+  
+  socket.on('unbanned', (data) => {
+    devLog('[WebSocket] User unbanned');
+    showNotification('You have been unbanned and reconnected!', 'success');
   });
   
   socket.on('action_result', (data) => {
