@@ -981,7 +981,7 @@ setInterval(() => {
   if (friendsWindowVisible) {
     updateFriendsWindow();
   }
-}, 5000);
+}, 1000);
 
 // Clean up stale friend blips every 5 seconds
 setInterval(() => {
