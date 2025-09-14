@@ -11,13 +11,6 @@ function devLog(...args) {
 }
 
 function initializeWebSocket() {
-  // Clean up any stuck friend blips from previous sessions
-  if (window.parent && window.parent !== window) {
-    for (let i = 0; i < 100; i++) {
-      window.parent.postMessage({ type: 'removeBlip', id: `friend_${i}` }, '*');
-    }
-  }
-  
   // Prevent multiple simultaneous connection attempts
   if (socket && (socket.connected || isConnecting)) {
     devLog('[initializeWebSocket] Already connected or connecting, skipping');
@@ -134,14 +127,38 @@ function initializeWebSocket() {
     handleFriendRequestsUpdate(data.requests);
   });
   
-  // Old location request handlers removed
+  socket.on('location_requests_update', (data) => {
+    devLog('[WebSocket] Location requests update:', data);
+    handleLocationRequestsUpdate(data.requests);
+  });
+  
+  socket.on('location_tracking_update', (data) => {
+    devLog('[WebSocket] Location tracking update:', data);
+    handleLocationTrackingUpdate(data.requests);
+  });
   
   socket.on('received_locations_update', (data) => {
     devLog('[WebSocket] Received locations update:', data);
     handleReceivedLocationsUpdate(data.locations);
   });
   
-  // Old location request event handlers removed
+  socket.on('location_request_received', (data) => {
+    devLog('[WebSocket] New location request received:', data);
+    refreshLocationRequests();
+    showNotification('New location tracking request!', 'info');
+  });
+  
+  socket.on('location_request_cancelled', (data) => {
+    devLog('[WebSocket] Location request cancelled:', data);
+    refreshLocationRequests();
+    updateLocationTrackingStatus();
+  });
+  
+  socket.on('location_request_accepted', (data) => {
+    devLog('[WebSocket] Location request accepted:', data);
+    updateLocationTrackingStatus();
+    showNotification('Location request accepted!', 'success');
+  });
   
   socket.on('friend_request_received', (data) => {
     devLog('[WebSocket] Friend request received:', data);
@@ -174,7 +191,15 @@ function initializeWebSocket() {
   
   socket.on('location_shared', (data) => {
     devLog('[WebSocket] Location shared:', data);
-    // Location sharing handled by received_locations_update event
+    if (data.location && data.location.pos_x && data.location.pos_y) {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ 
+          type: 'setWaypoint', 
+          x: data.location.pos_x, 
+          y: data.location.pos_y 
+        }, '*');
+      }
+    }
   });
   
   socket.on('server_restarting', (data) => {
@@ -189,20 +214,9 @@ function initializeWebSocket() {
     showNotification('Admin: ' + data.message, 'info');
   });
   
-  socket.on('friend_stopped_sharing', (data) => {
-    devLog('[WebSocket] Friend stopped sharing:', data);
-    removeFriendBlip(data.friend_id, data.blip_id);
-  });
-  
   socket.on('force_reload', (data) => {
     devLog('[WebSocket] Force reload received');
     showNotification('System update - reloading...', 'info', true);
-    
-    // Clean up all friend blips before reload
-    friendBlips.forEach((blipData, friendId) => {
-      removeFriendBlip(friendId);
-    });
-    
     setTimeout(() => {
       localStorage.setItem('shouldPinAfterReload', 'true');
       window.location.reload();
@@ -254,6 +268,8 @@ function initializeWebSocket() {
     devLog('[WebSocket] Requesting friends for user:', currentUserId);
     socket.emit('get_friends', { user_id: currentUserId });
     socket.emit('get_friend_requests', { user_id: currentUserId });
+    socket.emit('get_location_requests', { user_id: currentUserId });
+    socket.emit('get_location_tracking', { user_id: currentUserId });
   });
   
   socket.on('error', (data) => {
@@ -290,37 +306,6 @@ function toggleSound() {
   localStorage.setItem('soundEnabled', soundEnabled);
   document.getElementById('soundToggle').textContent = soundEnabled ? '🔊' : '🔇';
   devLog('[toggleSound] New state:', soundEnabled);
-}
-
-function toggleGPS() {
-  devLog('[toggleGPS] Called, current state:', gpsEnabled);
-  gpsEnabled = !gpsEnabled;
-  localStorage.setItem('gpsEnabled', gpsEnabled);
-  document.getElementById('gpsToggle').textContent = gpsEnabled ? '🧭' : '🗺️';
-  devLog('[toggleGPS] New state:', gpsEnabled);
-  
-  // Update all existing friend blips
-  friendBlips.forEach((blipData, friendId) => {
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({
-        type: 'setBlipRoute',
-        id: `friend_${friendId}`,
-        route: gpsEnabled
-      }, '*');
-    }
-  });
-}
-
-function toggleLocationSharing() {
-  devLog('[toggleLocationSharing] Called, current state:', locationSharingEnabled);
-  locationSharingEnabled = !locationSharingEnabled;
-  localStorage.setItem('locationSharingEnabled', locationSharingEnabled);
-  document.getElementById('shareToggle').textContent = locationSharingEnabled ? '📍' : '📏';
-  devLog('[toggleLocationSharing] New state:', locationSharingEnabled);
-  
-  if (socket && socket.connected && currentUserId) {
-    socket.emit('set_location_sharing', { user_id: currentUserId, enabled: locationSharingEnabled });
-  }
 }
 
 function setFriendName(friendId, customName) {
@@ -387,30 +372,114 @@ function editFriendName(friendId) {
 
 
 
-// Location sharing is now automatic when enabled
+let toggleCooldown = new Set();
+
+async function toggleLocationRequest(friendId) {
+  devLog('[toggleLocationRequest] Called for friendId:', friendId);
+  if (!currentUserId) {
+    devLog('[toggleLocationRequest] No currentUserId, returning');
+    return;
+  }
+  
+  // Prevent spam clicking
+  if (toggleCooldown.has(friendId)) {
+    devLog('[toggleLocationRequest] Cooldown active for friendId:', friendId);
+    return;
+  }
+  
+  const hasRequest = activeLocationRequests.has(String(friendId));
+  const isActiveTracking = activeLocationTracking.has(String(friendId));
+  const willActivate = !(hasRequest || isActiveTracking);
+  
+  // Add cooldown
+  toggleCooldown.add(friendId);
+  setTimeout(() => toggleCooldown.delete(friendId), 2000);
+  
+  if (socket && socket.connected) {
+    devLog('[toggleLocationRequest] Using WebSocket');
+    
+    // Immediately update UI state for instant feedback
+    if (willActivate) {
+      activeLocationRequests.add(String(friendId));
+    } else {
+      activeLocationRequests.delete(String(friendId));
+      activeLocationTracking.delete(String(friendId));
+      waypointNotificationShown.delete(String(friendId));
+    }
+    updateFriendsWindow();
+    
+    socket.emit('toggle_location_tracking', { requester_id: currentUserId, target_id: friendId, active: willActivate });
+    return;
+  }
+  
+  // WebSocket not connected
+  devLog('[toggleLocationRequest] WebSocket not connected');
+  showNotification('WebSocket not connected', 'error');
+}
+
+let activeLocationSharing = new Set();
+let acceptedLocationRequests = new Set();
 
 function startLocationSharing() {
   devLog('[startLocationSharing] Starting location sharing interval');
   setInterval(async () => {
-    if (currentUserId && locationSharingEnabled && socket && socket.connected) {
-      devLog('[startLocationSharing] Broadcasting location to friends');
-      if (window.parent && window.parent !== window && !window.pendingBroadcast) {
+    if (currentUserId && acceptedLocationRequests.size > 0) {
+      devLog('[startLocationSharing] Requesting location data once, accepted requests:', Array.from(acceptedLocationRequests));
+      // Request current location from game ONCE per interval
+      if (window.parent && window.parent !== window && !window.pendingAutoShare) {
         window.parent.postMessage({ 
           type: 'getNamedData', 
           keys: ['pos_x', 'pos_y']
         }, '*');
-        window.pendingBroadcast = true;
+        window.pendingAutoShare = true;
       }
     }
-  }, 2000);
+  }, 5000);
 }
 
 startLocationSharing();
 
-// Location sharing now handled by broadcast_location event
+function shareLocationData(locationData, requesterId) {
+  devLog('[shareLocationData] Sharing location with requesterId:', requesterId, 'data:', locationData);
+  
+  if (socket && socket.connected) {
+    devLog('[shareLocationData] Using WebSocket');
+    socket.emit('share_location', {
+      sharer_id: currentUserId,
+      requester_id: requesterId,
+      location: locationData
+    });
+    return;
+  }
+  
+  devLog('[shareLocationData] Using HTTP fallback');
+  const requestBody = { 
+    sharer_id: currentUserId, 
+    requester_id: requesterId,
+    location: locationData
+  };
+  devLog('[shareLocationData] Request body:', requestBody);
+  
+  fetch(API_BASE + '/location/share', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody)
+  }).then(response => {
+    devLog('[shareLocationData] Response status:', response.status);
+    if (!response.ok && response.status === 400) {
+      devLog('[shareLocationData] 400 error - removing from acceptedLocationRequests:', requesterId);
+      acceptedLocationRequests.delete(requesterId);
+      return;
+    }
+    return response.json();
+  }).then(result => {
+    if (result) devLog('[shareLocationData] Success result:', result);
+  }).catch(error => {
+    devLog('[shareLocationData] Error:', error);
+  });
+}
 
 let waypointNotificationShown = new Set();
-let friendBlips = new Map(); // Track active friend blips
 
 let lastNotificationCheck = 0;
 
@@ -436,72 +505,21 @@ async function checkLocationRequests() {
 }
 
 function handleReceivedLocationsUpdate(locations) {
-  if (!blipsEnabled) return;
-  
   if (locations && locations.length > 0) {
     devLog('[handleReceivedLocationsUpdate] Processing', locations.length, 'locations');
     locations.forEach(loc => {
-      devLog('[handleReceivedLocationsUpdate] Updating friend blip for:', loc.sharer_name, 'at:', loc.pos_x, loc.pos_y);
-      updateFriendBlip(loc.sharer_id, loc.sharer_name, loc.pos_x, loc.pos_y);
+      devLog('[handleReceivedLocationsUpdate] Setting waypoint from:', loc.sharer_name, 'at:', loc.pos_x, loc.pos_y);
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ 
+          type: 'setWaypoint', 
+          x: loc.pos_x, 
+          y: loc.pos_y 
+        }, '*');
+      }
     });
   } else {
     devLog('[handleReceivedLocationsUpdate] No locations received');
   }
-}
-
-function updateFriendBlip(friendId, friendName, x, y, blipId) {
-  if (!window.parent || window.parent === window || !blipsEnabled) return;
-  
-  const actualBlipId = blipId || `friend_${friendId}`;
-  const color = getFriendColor(friendId);
-  
-  if (friendBlips.has(friendId)) {
-    // Update existing blip position and timestamp
-    const blipData = friendBlips.get(friendId);
-    blipData.lastUpdate = Date.now();
-    window.parent.postMessage({
-      type: 'setBlipPosition',
-      id: actualBlipId,
-      x: x,
-      y: y
-    }, '*');
-    
-    // Update GPS routing if enabled
-    if (gpsEnabled) {
-      window.parent.postMessage({
-        type: 'setBlipRoute',
-        id: actualBlipId,
-        route: true
-      }, '*');
-    }
-  } else {
-    // Create new friend blip with unique color
-    window.parent.postMessage({
-      type: 'buildBlip',
-      id: actualBlipId,
-      x: x,
-      y: y,
-      sprite: 1,
-      color: color,
-      alwaysVisible: true,
-      route: gpsEnabled,
-      ticked: false,
-      name: friendName || `Friend ${friendId}`
-    }, '*');
-    friendBlips.set(friendId, { name: friendName, x: x, y: y, blipId: actualBlipId, lastUpdate: Date.now() });
-  }
-}
-
-function removeFriendBlip(friendId, blipId) {
-  if (!window.parent || window.parent === window) return;
-  
-  const actualBlipId = blipId || friendBlips.get(friendId)?.blipId || `friend_${friendId}`;
-  window.parent.postMessage({
-    type: 'removeBlip',
-    id: actualBlipId
-  }, '*');
-  friendBlips.delete(friendId);
-  friendGPSRouting.delete(friendId);
 }
 
 async function sendFriendRequest() {
@@ -597,16 +615,10 @@ function handleFriendRequestsUpdate(requests) {
 let friendsData = [];
 let friendsWindowVisible = localStorage.getItem('friendsWindowVisible') === 'true';
 let hideIds = localStorage.getItem('hideIds') === 'true';
-let gpsEnabled = localStorage.getItem('gpsEnabled') === 'true';
-let locationSharingEnabled = localStorage.getItem('locationSharingEnabled') === 'true';
-let blipsEnabled = localStorage.getItem('blipsEnabled') !== 'false';
 let lastUpdateTime = Math.floor(Date.now() / 1000);
 let cached_players = [];
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
 let friendsWindow = document.getElementById('friendsWindow');
-let friendColors = new Map(); // Track friend colors
-let friendGPSRouting = new Set(); // Track which friends have GPS routing enabled
-let friendSessionData = new Map(); // Store friend session data with timestamps
 
 // Set initial button states
 setTimeout(() => {
@@ -616,16 +628,10 @@ setTimeout(() => {
   if (document.getElementById('hideIdsToggle')) {
     document.getElementById('hideIdsToggle').textContent = hideIds ? '🙈' : '👁️';
   }
-
-  if (document.getElementById('shareToggle')) {
-    document.getElementById('shareToggle').textContent = locationSharingEnabled ? '📍' : '📏';
-  }
-  if (document.getElementById('blipsToggle')) {
-    document.getElementById('blipsToggle').textContent = blipsEnabled ? '👥' : '🚫';
-  }
   friendsWindow = document.getElementById('friendsWindow');
 }, 100);
 let previousOnlineFriends = new Set();
+let activeLocationRequests = new Set();
 let suppressOfflineNotifications = false;
 let serverRestartDetected = false;
 
@@ -638,19 +644,10 @@ function formatSeconds(seconds) {
 
 function getConnectedSeconds(friend) {
   if (!friend.online) return 0;
-  
-  const sessionData = friendSessionData.get(friend.friend_id);
-  if (sessionData) {
-    const now = Math.floor(Date.now() / 1000);
-    const elapsedSinceUpdate = now - sessionData.timestamp;
-    const totalSeconds = sessionData.baseSeconds + elapsedSinceUpdate;
-    
-    devLog('[timeconnected] Friend:', friend.name, 'baseSeconds:', sessionData.baseSeconds, 'elapsedSinceUpdate:', elapsedSinceUpdate, 'totalSeconds:', totalSeconds);
-    
-    return totalSeconds;
-  }
-  
-  return friend.sessionDuration || 0;
+  const baseSeconds = friend.sessionDuration || 0;
+  const now = Math.floor(Date.now() / 1000);
+  const elapsedSinceUpdate = now - lastUpdateTime;
+  return baseSeconds + elapsedSinceUpdate;
 }
 
 async function refreshFriends() {
@@ -673,17 +670,6 @@ function handleFriendsUpdate(newFriendsData) {
   
   if (!newFriendsData) {
     newFriendsData = [];
-  }
-  
-  // Remove blips for friends who stopped sharing location
-  if (friendsData.length > 0) {
-    friendsData.forEach(oldFriend => {
-      const newFriend = newFriendsData.find(f => f.friend_id === oldFriend.friend_id);
-      if (oldFriend.sharing_location && (!newFriend || !newFriend.sharing_location)) {
-        devLog('[handleFriendsUpdate] Friend stopped sharing:', oldFriend.name);
-        removeFriendBlip(oldFriend.friend_id, oldFriend.blip_id);
-      }
-    });
   }
   
   // Check for friend join/leave notifications
@@ -719,31 +705,9 @@ function handleFriendsUpdate(newFriendsData) {
     previousOnlineFriends = new Set(newFriendsData.filter(f => f.online).map(f => f.friend_id));
   }
   
-  // Store session data for each friend
-  const now = Math.floor(Date.now() / 1000);
-  newFriendsData.forEach(friend => {
-    if (friend.online && friend.sessionDuration !== undefined) {
-      friendSessionData.set(friend.friend_id, {
-        baseSeconds: friend.sessionDuration,
-        timestamp: now
-      });
-    }
-  });
-  
   friendsData = newFriendsData;
-  const newLastUpdateTime = now;
-  devLog('[timeconnected] Setting lastUpdateTime from', lastUpdateTime, 'to', newLastUpdateTime);
-  lastUpdateTime = newLastUpdateTime;
+  lastUpdateTime = Math.floor(Date.now() / 1000);
   updateFriendsWindow();
-}
-
-function getFriendColor(friendId) {
-  if (!friendColors.has(friendId)) {
-    const colors = [1, 2, 3, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
-    const colorIndex = parseInt(friendId) % colors.length;
-    friendColors.set(friendId, colors[colorIndex]);
-  }
-  return friendColors.get(friendId);
 }
 
 function updateFriendsWindow() {
@@ -773,19 +737,14 @@ function updateFriendsWindow() {
     const sessionDuration = getConnectedSeconds(friend);
     const timeStr = formatSeconds(sessionDuration);
     const betaIndicator = friend.server === 'njyvop' ? ' [BETA]' : '';
+    const hasRequest = activeLocationRequests.has(friend.friend_id);
+    const isActive = activeLocationTracking.has(friend.friend_id);
+    const buttonStyle = isActive ? 'background: #43a047; color: white;' : (hasRequest ? 'background: #ffa500; color: white;' : 'background: #5865f2; color: white;');
+    const buttonText = isActive ? '📍✓' : (hasRequest ? '📍⏳' : '📍');
     const idText = hideIds ? '' : ' (ID: ' + friend.friend_id + ')';
     const spanStyle = hideIds ? 'flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' : 'flex: 1;';
-    
-    // Show colored dot if friend is sharing location, nothing if not
-    let locationIndicator = '';
-    if (friend.sharing_location) {
-      const color = getFriendColor(friend.friend_id);
-      const colorMap = {1:'red',2:'green',3:'blue',5:'yellow',6:'#ff6b6b',7:'#8b5cf6',8:'pink',9:'#ffa500',11:'#00ff7f',12:'#87ceeb',15:'cyan',17:'orange',20:'#ffd700',21:'#ff8c00',22:'#d3d3d3'};
-      const colorName = colorMap[color] || 'white';
-      locationIndicator = '<span onclick="toggleFriendGPS(\'' + friend.friend_id + '\')" style="color: ' + colorName + '; font-size: 1rem; margin-left: 5px; cursor: pointer;" title="Click to toggle GPS routing">●</span>';
-    }
-    
-    return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span style="' + spanStyle + '">' + friend.name + idText + betaIndicator + ' (' + timeStr + ')' + locationIndicator + '</span></div>';
+    devLog('[updateFriendsWindow] Friend', friend.name, '- hasRequest:', hasRequest, 'isActive:', isActive);
+    return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span style="' + spanStyle + '">' + friend.name + idText + betaIndicator + ' (' + timeStr + ')</span><button onclick="toggleLocationRequest(' + friend.friend_id + ')" style="' + buttonStyle + ' border: none; border-radius: 3px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer; flex-shrink: 0; margin-left: 5px;">' + buttonText + '</button></div>';
   }).join('');
   
   friendsWindow.innerHTML = header + friendsList;
@@ -797,45 +756,6 @@ function toggleFriendsWindow() {
   localStorage.setItem('friendsWindowVisible', friendsWindowVisible);
   devLog('[toggleFriendsWindow] New state:', friendsWindowVisible);
   updateFriendsWindow();
-}
-
-function toggleFriendGPS(friendId) {
-  if (!window.parent || window.parent === window) return;
-  
-  const blipId = `friend_${friendId}`;
-  if (friendBlips.has(friendId)) {
-    const isRouting = friendGPSRouting.has(friendId);
-    const newRoutingState = !isRouting;
-    
-    window.parent.postMessage({
-      type: 'setBlipRoute',
-      id: blipId,
-      route: newRoutingState
-    }, '*');
-    
-    if (newRoutingState) {
-      friendGPSRouting.add(friendId);
-      showNotification('GPS routing enabled for friend', 'success');
-    } else {
-      friendGPSRouting.delete(friendId);
-      showNotification('GPS routing disabled for friend', 'info');
-    }
-  }
-}
-
-function toggleBlips() {
-  blipsEnabled = !blipsEnabled;
-  localStorage.setItem('blipsEnabled', blipsEnabled);
-  if (document.getElementById('blipsToggle')) {
-    document.getElementById('blipsToggle').textContent = blipsEnabled ? '👥' : '🚫';
-  }
-  
-  if (!blipsEnabled) {
-    // Remove all friend blips when disabled
-    friendBlips.forEach((blipData, friendId) => {
-      removeFriendBlip(friendId);
-    });
-  }
 }
 
 function toggleIds() {
@@ -970,11 +890,20 @@ window.addEventListener('message', (event) => {
       pos_y: payload.pos_y
     };
     
-    // Broadcast location to all friends if sharing is enabled
-    if (window.pendingBroadcast && locationSharingEnabled && socket && socket.connected && currentUserId) {
-      devLog('[message] Broadcasting location to friends:', locationData);
-      socket.emit('broadcast_location', { user_id: currentUserId, location: locationData });
-      window.pendingBroadcast = false;
+    // Handle one-time location share
+    if (window.pendingLocationShare) {
+      devLog('[message] Location data received for one-time share:', locationData, 'to:', window.pendingLocationShare);
+      shareLocationData(locationData, window.pendingLocationShare);
+      window.pendingLocationShare = null;
+    }
+    
+    // Handle automatic location sharing for accepted requests
+    if (window.pendingAutoShare && acceptedLocationRequests.size > 0) {
+      devLog('[message] Location data received for auto-share:', locationData, 'to:', Array.from(acceptedLocationRequests));
+      acceptedLocationRequests.forEach(requesterId => {
+        shareLocationData(locationData, requesterId);
+      });
+      window.pendingAutoShare = false;
     }
   }
 });
@@ -989,13 +918,132 @@ window.addEventListener('keydown', (e) => {
 
 let lastLocationRequestCount = -1;
 
-// Old location request system removed
+async function refreshLocationRequests() {
+  devLog('[refreshLocationRequests] Called');
+  if (!currentUserId) {
+    devLog('[refreshLocationRequests] No currentUserId, returning');
+    return;
+  }
+  
+  if (socket && socket.connected) {
+    devLog('[refreshLocationRequests] Using WebSocket');
+    socket.emit('get_location_requests', { user_id: currentUserId });
+  } else {
+    devLog('[refreshLocationRequests] WebSocket not connected');
+    document.getElementById('locationRequestsList').innerHTML = '<div style="text-align: center; color: #f44336; font-size: 0.8rem;">WebSocket not connected</div>';
+  }
+}
+
+function handleLocationRequestsUpdate(requests) {
+  devLog('[handleLocationRequestsUpdate] Processing requests:', requests);
+  const locationRequestsList = document.getElementById('locationRequestsList');
+  if (requests && requests.length > 0) {
+    lastLocationRequestCount = requests.length;
+    
+    locationRequestsList.innerHTML = requests.map(req => {
+      devLog('[handleLocationRequestsUpdate] Processing incoming request:', req);
+      if (req.status === 'pending') {
+        return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • Wants to track your location</div></div><div><button onclick="acceptLocationRequest(' + req.requester_id + ')" style="background: #43a047; color: white; border: none; border-radius: 3px; padding: 6px 8px; margin-right: 4px; cursor: pointer;">Accept</button><button onclick="denyLocationRequest(' + req.requester_id + ')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">Deny</button></div></div>';
+      } else {
+        devLog('[handleLocationRequestsUpdate] Adding to acceptedLocationRequests:', req.requester_id);
+        acceptedLocationRequests.add(String(req.requester_id));
+        return '<div class="request-item"><div><strong>' + req.requester_name + '</strong><div style="font-size: 0.7rem; color: #99aab5;">ID: ' + req.requester_id + ' • Sharing location</div></div><div><button onclick="declineLocationRequest(' + req.requester_id + ')" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 6px 8px; cursor: pointer;">Stop</button></div></div>';
+      }
+    }).join('');
+    
+    devLog('[handleLocationRequestsUpdate] acceptedLocationRequests updated:', Array.from(acceptedLocationRequests));
+  } else {
+    if (lastLocationRequestCount === -1) lastLocationRequestCount = 0;
+    else lastLocationRequestCount = 0;
+    locationRequestsList.innerHTML = '<div style="text-align: center; color: #99aab5; font-size: 0.8rem; padding: 1rem;">No location requests</div>';
+    devLog('[handleLocationRequestsUpdate] No incoming requests');
+  }
+}
+
+
+
+async function acceptLocationRequest(requesterId) {
+  if (socket && socket.connected) {
+    socket.emit('accept_location_request', { requester_id: requesterId, target_id: currentUserId });
+  } else {
+    showNotification('WebSocket not connected', 'error');
+  }
+}
+
+async function denyLocationRequest(requesterId) {
+  if (socket && socket.connected) {
+    socket.emit('deny_location_request', { requester_id: requesterId, target_id: currentUserId });
+  } else {
+    showNotification('WebSocket not connected', 'error');
+  }
+}
+
+async function declineLocationRequest(requesterId) {
+  if (socket && socket.connected) {
+    socket.emit('toggle_location_tracking', { requester_id: requesterId, target_id: currentUserId, active: false });
+    acceptedLocationRequests.delete(String(requesterId));
+    waypointNotificationShown.delete(requesterId);
+  } else {
+    showNotification('WebSocket not connected', 'error');
+  }
+}
+
+let activeLocationTracking = new Set();
+
+async function updateLocationTrackingStatus() {
+  devLog('[updateLocationTrackingStatus] Called');
+  if (!currentUserId) {
+    devLog('[updateLocationTrackingStatus] No currentUserId, returning');
+    return;
+  }
+  
+  if (socket && socket.connected) {
+    devLog('[updateLocationTrackingStatus] Using WebSocket');
+    socket.emit('get_location_tracking', { user_id: currentUserId });
+  } else {
+    devLog('[updateLocationTrackingStatus] WebSocket not connected');
+  }
+}
+
+function handleLocationTrackingUpdate(requests) {
+  devLog('[handleLocationTrackingUpdate] Processing requests:', requests);
+  
+  // Store previous state for comparison
+  const prevRequests = new Set(activeLocationRequests);
+  const prevTracking = new Set(activeLocationTracking);
+  
+  // Only manage outgoing requests (what you sent to others)
+  activeLocationRequests.clear();
+  activeLocationTracking.clear();
+  if (requests) {
+    requests.forEach(req => {
+      devLog('[handleLocationTrackingUpdate] Processing request:', req);
+      if (req.status === 'pending') {
+        activeLocationRequests.add(req.target_id);
+      } else if (req.status === 'active') {
+        activeLocationTracking.add(req.target_id);
+      }
+    });
+  }
+  
+  devLog('[handleLocationTrackingUpdate] Updated state:');
+  devLog('  activeLocationRequests:', Array.from(activeLocationRequests));
+  devLog('  activeLocationTracking:', Array.from(activeLocationTracking));
+  
+  // Log changes
+  const requestChanges = [...activeLocationRequests].filter(x => !prevRequests.has(x)).concat([...prevRequests].filter(x => !activeLocationRequests.has(x)));
+  const trackingChanges = [...activeLocationTracking].filter(x => !prevTracking.has(x)).concat([...prevTracking].filter(x => !activeLocationTracking.has(x)));
+  if (requestChanges.length > 0) devLog('[handleLocationTrackingUpdate] Request changes:', requestChanges);
+  if (trackingChanges.length > 0) devLog('[handleLocationTrackingUpdate] Tracking changes:', trackingChanges);
+}
 
 setInterval(() => {
   if (currentUserId) {
     refreshRequests();
     refreshFriends();
+    refreshLocationRequests();
     checkLocationRequests();
+    updateLocationTrackingStatus();
     checkAdminNotifications();
   }
 }, 5000);
@@ -1004,23 +1052,6 @@ setInterval(() => {
   if (friendsWindowVisible) {
     updateFriendsWindow();
   }
-}, 1000);
-
-// Clean up stale friend blips every 5 seconds
-setInterval(() => {
-  const now = Date.now();
-  const staleBlips = [];
-  
-  friendBlips.forEach((blipData, friendId) => {
-    if (now - blipData.lastUpdate > 15000) { // 15 seconds
-      staleBlips.push(friendId);
-    }
-  });
-  
-  staleBlips.forEach(friendId => {
-    devLog('[cleanup] Removing stale blip for friend:', friendId);
-    removeFriendBlip(friendId);
-  });
 }, 5000);
 
 let isDragging = false;

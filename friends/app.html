@@ -13,19 +13,8 @@
   <div class="friends-container">
     <div class="header">
       <div class="title">Friends List System</div>
-      <div style="position: absolute; right: 10px; top: 35px; display: flex; gap: 5px; align-items: center;">
-        <button id="shareToggle" onclick="toggleLocationSharing()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;" title="Share: Broadcast your location to friends">📍</button>
-        <button id="blipsToggle" onclick="toggleBlips()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;" title="Blips: Show/hide friend blips">👥</button>
-        <button id="hideIdsToggle" onclick="toggleIds()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;" title="IDs: Show/hide friend IDs">👁️</button>
-        <button id="soundToggle" onclick="toggleSound()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;" title="Sound: Toggle notifications">🔊</button>
-      </div>
-    </div>
-    
-    <div class="user-section">
-      <div class="section-title">Controls</div>
-      <div style="font-size: 0.8rem; color: #99aab5; line-height: 1.3;">
-        📍 Share location with friends • 👥 Show/hide friend blips • 👁️ Show/hide IDs • 🔊 Sound notifications
-      </div>
+      <button id="soundToggle" onclick="toggleSound()" style="position: absolute; right: 10px; top: 10px; background: none; border: none; font-size: 1.2rem; cursor: pointer;">🔊</button>
+      <button id="hideIdsToggle" onclick="toggleIds()" style="position: absolute; right: 40px; top: 10px; background: none; border: none; font-size: 1.2rem; cursor: pointer;">👁️</button>
     </div>
     
     <div class="user-section">
@@ -48,19 +37,29 @@
     </div>
     
     <div class="user-section">
-      <div class="section-title">Friends</div>
+      <div class="section-title">Location Requests</div>
+      <div id="locationRequestsList"></div>
+    </div>
+    
+    <div class="user-section">
+      <div class="section-title">Active Friends</div>
       <button onclick="toggleFriendsWindow()" style="width: 100%; margin-bottom: 0.3rem; padding: 5px;">Toggle Friends Window</button>
-      <div style="display: flex; gap: 5px; margin-bottom: 0.2rem;">
-        <input type="text" id="removeFriendId" placeholder="Remove Friend ID" class="friend-input" style="flex: 1;">
-        <button onclick="removeFriendById()" class="send-inline" style="background: #f44336; padding: 3px 6px;">Remove</button>
+      
+      <div style="display: flex; gap: 5px; margin-bottom: 0.3rem;">
+        <input type="text" id="removeFriendId" placeholder="Friend's User ID" class="friend-input" style="flex: 1;">
+        <button onclick="removeFriendById()" class="send-inline" style="background: #f44336;">Remove</button>
       </div>
       <div id="removeStatus"></div>
-      <div style="display: flex; gap: 5px;">
-        <input type="text" id="friendNameId" placeholder="Friend ID" class="friend-input" style="flex: 1;">
-        <input type="text" id="friendCustomName" placeholder="Rename" class="friend-input" style="flex: 1;">
-        <button onclick="setFriendNameById()" class="send-inline" style="padding: 3px 6px;">Set Name</button>
+      
+      <div style="border-top: 1px solid #444; padding-top: 0.3rem; margin-top: 0.3rem;">
+        <div style="font-size: 0.8rem; margin-bottom: 0.2rem;">Set Friend Name (empty = reset)</div>
+        <div style="display: flex; gap: 5px; margin-bottom: 0.2rem;">
+          <input type="text" id="friendNameId" placeholder="Friend ID" class="friend-input" style="flex: 1;">
+          <input type="text" id="friendCustomName" placeholder="Custom name" class="friend-input" style="flex: 1;">
+        </div>
+        <button onclick="setFriendNameById()" class="send-inline" style="width: 100%; padding: 5px;">Set Name</button>
+        <div id="nameStatus"></div>
       </div>
-      <div id="nameStatus"></div>
     </div>
     
     <div class="user-section">
