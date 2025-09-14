@@ -637,14 +637,11 @@ function formatSeconds(seconds) {
 
 function getConnectedSeconds(friend) {
   if (!friend.online) return 0;
-  const baseSeconds = friend.sessionDuration || 0;
-  const now = Math.floor(Date.now() / 1000);
-  const elapsedSinceUpdate = now - lastUpdateTime;
-  const totalSeconds = baseSeconds + elapsedSinceUpdate;
+  const sessionSeconds = friend.sessionDuration || 0;
   
-  devLog('[timeconnected] Friend:', friend.name, 'baseSeconds:', baseSeconds, 'elapsedSinceUpdate:', elapsedSinceUpdate, 'totalSeconds:', totalSeconds, 'lastUpdateTime:', lastUpdateTime);
+  devLog('[timeconnected] Friend:', friend.name, 'sessionSeconds:', sessionSeconds);
   
-  return totalSeconds;
+  return sessionSeconds;
 }
 
 async function refreshFriends() {
