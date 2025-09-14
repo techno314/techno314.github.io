@@ -231,6 +231,15 @@ function initializeWebSocket() {
     }, 2000);
   });
   
+  socket.on('banned', (data) => {
+    devLog('[WebSocket] User banned:', data);
+    showNotification(`You have been banned from WebSocket: ${data.reason}`, 'error');
+    // Disconnect but allow reconnection attempts
+    if (socket) {
+      socket.disconnect();
+    }
+  });
+  
   socket.on('action_result', (data) => {
     devLog('[WebSocket] Action result:', data);
     if (data.success) {
