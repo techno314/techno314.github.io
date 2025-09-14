@@ -233,12 +233,16 @@ function initializeWebSocket() {
   
   socket.on('banned', (data) => {
     devLog('[WebSocket] User banned:', data);
-    const banMessage = `You are banned from WebSocket connections.\nReason: ${data.reason}`;
+    let banMessage = `You are banned from WebSocket connections.\nReason: ${data.reason}`;
     if (data.permanent) {
-      showNotification(banMessage + '\nThis ban is permanent.', 'error', true);
-    } else {
-      showNotification(banMessage, 'error', true);
+      banMessage += '\nThis ban is permanent.';
+    } else if (data.expires_at) {
+      const expiresAt = new Date(data.expires_at);
+      const now = new Date();
+      const timeLeft = Math.max(0, Math.ceil((expiresAt - now) / 60000));
+      banMessage += `\nTime remaining: ${timeLeft} minutes`;
     }
+    showNotification(banMessage, 'error', true);
   });
   
   socket.on('unbanned', (data) => {
