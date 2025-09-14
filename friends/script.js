@@ -606,6 +606,7 @@ let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
 let friendsWindow = document.getElementById('friendsWindow');
 let friendColors = new Map(); // Track friend colors
 let friendGPSRouting = new Set(); // Track which friends have GPS routing enabled
+let friendSessionData = new Map(); // Store friend session data with timestamps
 
 // Set initial button states
 setTimeout(() => {
@@ -637,11 +638,19 @@ function formatSeconds(seconds) {
 
 function getConnectedSeconds(friend) {
   if (!friend.online) return 0;
-  const sessionSeconds = friend.sessionDuration || 0;
   
-  devLog('[timeconnected] Friend:', friend.name, 'sessionSeconds:', sessionSeconds);
+  const sessionData = friendSessionData.get(friend.friend_id);
+  if (sessionData) {
+    const now = Math.floor(Date.now() / 1000);
+    const elapsedSinceUpdate = now - sessionData.timestamp;
+    const totalSeconds = sessionData.baseSeconds + elapsedSinceUpdate;
+    
+    devLog('[timeconnected] Friend:', friend.name, 'baseSeconds:', sessionData.baseSeconds, 'elapsedSinceUpdate:', elapsedSinceUpdate, 'totalSeconds:', totalSeconds);
+    
+    return totalSeconds;
+  }
   
-  return sessionSeconds;
+  return friend.sessionDuration || 0;
 }
 
 async function refreshFriends() {
@@ -710,8 +719,19 @@ function handleFriendsUpdate(newFriendsData) {
     previousOnlineFriends = new Set(newFriendsData.filter(f => f.online).map(f => f.friend_id));
   }
   
+  // Store session data for each friend
+  const now = Math.floor(Date.now() / 1000);
+  newFriendsData.forEach(friend => {
+    if (friend.online && friend.sessionDuration !== undefined) {
+      friendSessionData.set(friend.friend_id, {
+        baseSeconds: friend.sessionDuration,
+        timestamp: now
+      });
+    }
+  });
+  
   friendsData = newFriendsData;
-  const newLastUpdateTime = Math.floor(Date.now() / 1000);
+  const newLastUpdateTime = now;
   devLog('[timeconnected] Setting lastUpdateTime from', lastUpdateTime, 'to', newLastUpdateTime);
   lastUpdateTime = newLastUpdateTime;
   updateFriendsWindow();
