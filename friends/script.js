@@ -160,6 +160,14 @@ function initializeWebSocket() {
     showNotification('Location request accepted!', 'success');
   });
   
+  socket.on('refresh_data', (data) => {
+    devLog('[WebSocket] Refresh data triggered');
+    refreshRequests();
+    refreshFriends();
+    refreshLocationRequests();
+    updateLocationTrackingStatus();
+  });
+  
   socket.on('friend_request_received', (data) => {
     devLog('[WebSocket] Friend request received:', data);
     refreshRequests();
