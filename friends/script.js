@@ -456,7 +456,9 @@ function updateFriendBlip(friendId, friendName, x, y, blipId) {
   const color = getFriendColor(friendId);
   
   if (friendBlips.has(friendId)) {
-    // Update existing blip position
+    // Update existing blip position and timestamp
+    const blipData = friendBlips.get(friendId);
+    blipData.lastUpdate = Date.now();
     window.parent.postMessage({
       type: 'setBlipPosition',
       id: actualBlipId,
@@ -486,7 +488,7 @@ function updateFriendBlip(friendId, friendName, x, y, blipId) {
       ticked: false,
       name: friendName || `Friend ${friendId}`
     }, '*');
-    friendBlips.set(friendId, { name: friendName, x: x, y: y, blipId: actualBlipId });
+    friendBlips.set(friendId, { name: friendName, x: x, y: y, blipId: actualBlipId, lastUpdate: Date.now() });
   }
 }
 
@@ -499,6 +501,7 @@ function removeFriendBlip(friendId, blipId) {
     id: actualBlipId
   }, '*');
   friendBlips.delete(friendId);
+  friendGPSRouting.delete(friendId);
 }
 
 async function sendFriendRequest() {
@@ -602,6 +605,7 @@ let cached_players = [];
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
 let friendsWindow = document.getElementById('friendsWindow');
 let friendColors = new Map(); // Track friend colors
+let friendGPSRouting = new Set(); // Track which friends have GPS routing enabled
 
 // Set initial button states
 setTimeout(() => {
@@ -777,12 +781,22 @@ function toggleFriendGPS(friendId) {
   
   const blipId = `friend_${friendId}`;
   if (friendBlips.has(friendId)) {
+    const isRouting = friendGPSRouting.has(friendId);
+    const newRoutingState = !isRouting;
+    
     window.parent.postMessage({
       type: 'setBlipRoute',
       id: blipId,
-      route: true
+      route: newRoutingState
     }, '*');
-    showNotification('GPS routing enabled for friend', 'success');
+    
+    if (newRoutingState) {
+      friendGPSRouting.add(friendId);
+      showNotification('GPS routing enabled for friend', 'success');
+    } else {
+      friendGPSRouting.delete(friendId);
+      showNotification('GPS routing disabled for friend', 'info');
+    }
   }
 }
 
@@ -967,6 +981,23 @@ setInterval(() => {
   if (friendsWindowVisible) {
     updateFriendsWindow();
   }
+}, 5000);
+
+// Clean up stale friend blips every 5 seconds
+setInterval(() => {
+  const now = Date.now();
+  const staleBlips = [];
+  
+  friendBlips.forEach((blipData, friendId) => {
+    if (now - blipData.lastUpdate > 15000) { // 15 seconds
+      staleBlips.push(friendId);
+    }
+  });
+  
+  staleBlips.forEach(friendId => {
+    devLog('[cleanup] Removing stale blip for friend:', friendId);
+    removeFriendBlip(friendId);
+  });
 }, 5000);
 
 let isDragging = false;
