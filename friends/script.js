@@ -611,9 +611,7 @@ setTimeout(() => {
   if (document.getElementById('hideIdsToggle')) {
     document.getElementById('hideIdsToggle').textContent = hideIds ? '🙈' : '👁️';
   }
-  if (document.getElementById('gpsToggle')) {
-    document.getElementById('gpsToggle').textContent = gpsEnabled ? '🧭' : '🗺️';
-  }
+
   if (document.getElementById('shareToggle')) {
     document.getElementById('shareToggle').textContent = locationSharingEnabled ? '📍' : '📏';
   }
@@ -757,7 +755,7 @@ function updateFriendsWindow() {
       const color = getFriendColor(friend.friend_id);
       const colorMap = {1:'red',2:'green',3:'blue',5:'yellow',6:'#ff6b6b',7:'#8b5cf6',8:'pink',9:'#ffa500',11:'#00ff7f',12:'#87ceeb',15:'cyan',17:'orange',20:'#ffd700',21:'#ff8c00',22:'#d3d3d3'};
       const colorName = colorMap[color] || 'white';
-      locationIndicator = '<span style="color: ' + colorName + '; font-size: 1rem; margin-left: 5px;">●</span>';
+      locationIndicator = '<span onclick="toggleFriendGPS(\'' + friend.friend_id + '\')" style="color: ' + colorName + '; font-size: 1rem; margin-left: 5px; cursor: pointer;" title="Click to toggle GPS routing">●</span>';
     }
     
     return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span style="' + spanStyle + '">' + friend.name + idText + betaIndicator + ' (' + timeStr + ')' + locationIndicator + '</span></div>';
@@ -772,6 +770,20 @@ function toggleFriendsWindow() {
   localStorage.setItem('friendsWindowVisible', friendsWindowVisible);
   devLog('[toggleFriendsWindow] New state:', friendsWindowVisible);
   updateFriendsWindow();
+}
+
+function toggleFriendGPS(friendId) {
+  if (!window.parent || window.parent === window) return;
+  
+  const blipId = `friend_${friendId}`;
+  if (friendBlips.has(friendId)) {
+    window.parent.postMessage({
+      type: 'setBlipRoute',
+      id: blipId,
+      route: true
+    }, '*');
+    showNotification('GPS routing enabled for friend', 'success');
+  }
 }
 
 function toggleBlips() {
