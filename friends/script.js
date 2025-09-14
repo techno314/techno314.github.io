@@ -640,7 +640,11 @@ function getConnectedSeconds(friend) {
   const baseSeconds = friend.sessionDuration || 0;
   const now = Math.floor(Date.now() / 1000);
   const elapsedSinceUpdate = now - lastUpdateTime;
-  return baseSeconds + elapsedSinceUpdate;
+  const totalSeconds = baseSeconds + elapsedSinceUpdate;
+  
+  devLog('[timeconnected] Friend:', friend.name, 'baseSeconds:', baseSeconds, 'elapsedSinceUpdate:', elapsedSinceUpdate, 'totalSeconds:', totalSeconds, 'lastUpdateTime:', lastUpdateTime);
+  
+  return totalSeconds;
 }
 
 async function refreshFriends() {
@@ -710,7 +714,9 @@ function handleFriendsUpdate(newFriendsData) {
   }
   
   friendsData = newFriendsData;
-  lastUpdateTime = Math.floor(Date.now() / 1000);
+  const newLastUpdateTime = Math.floor(Date.now() / 1000);
+  devLog('[timeconnected] Setting lastUpdateTime from', lastUpdateTime, 'to', newLastUpdateTime);
+  lastUpdateTime = newLastUpdateTime;
   updateFriendsWindow();
 }
 
