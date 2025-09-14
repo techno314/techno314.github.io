@@ -68,6 +68,13 @@ function initializeWebSocket() {
     if (currentUserId) {
       socket.emit('join_user', { user_id: currentUserId });
     }
+    
+    // Set up periodic ping for latency measurement
+    setInterval(() => {
+      if (socket && socket.connected) {
+        socket.emit('ping', {timestamp: Date.now()});
+      }
+    }, 5000);
     // Reset restart detection after reconnection
     if (serverRestartDetected) {
       setTimeout(() => {
@@ -248,6 +255,11 @@ function initializeWebSocket() {
   socket.on('unbanned', (data) => {
     devLog('[WebSocket] User unbanned');
     showNotification('You have been unbanned and reconnected!', 'success');
+  });
+  
+  socket.on('ping', (data) => {
+    devLog('[WebSocket] Ping received, sending pong');
+    socket.emit('pong', data);
   });
   
   socket.on('action_result', (data) => {
