@@ -69,12 +69,7 @@ function initializeWebSocket() {
       socket.emit('join_user', { user_id: currentUserId });
     }
     
-    // Set up periodic ping for latency measurement
-    setInterval(() => {
-      if (socket && socket.connected) {
-        socket.emit('ping', {timestamp: Date.now()});
-      }
-    }, 5000);
+    // Server will send pings for latency measurement
     // Reset restart detection after reconnection
     if (serverRestartDetected) {
       setTimeout(() => {
