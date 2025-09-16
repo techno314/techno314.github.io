@@ -253,8 +253,10 @@ function initializeWebSocket() {
   });
   
   socket.on('ping', (data) => {
+    console.log('[WebSocket] Ping received:', data);
     devLog('[WebSocket] Ping received, sending pong');
     socket.emit('pong', data);
+    console.log('[WebSocket] Pong sent:', data);
   });
   
   socket.on('action_result', (data) => {
