@@ -238,6 +238,8 @@ function initializeWebSocket() {
     let banMessage = `You are banned from WebSocket connections.\nReason: ${data.reason}`;
     if (data.permanent) {
       banMessage += '\nThis ban is permanent.';
+    } else if (data.duration_minutes) {
+      banMessage += `\nTime remaining: ${data.duration_minutes} minutes`;
     } else if (data.expires_at) {
       const expiresAt = new Date(data.expires_at);
       const now = new Date();
@@ -253,10 +255,8 @@ function initializeWebSocket() {
   });
   
   socket.on('ping', (data) => {
-    console.log('[WebSocket] Ping received:', data);
     devLog('[WebSocket] Ping received, sending pong');
     socket.emit('pong', data);
-    console.log('[WebSocket] Pong sent:', data);
   });
   
   socket.on('action_result', (data) => {
