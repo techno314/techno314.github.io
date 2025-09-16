@@ -805,8 +805,14 @@ function updateFriendsWindow() {
     const buttonText = isActive ? '📍✓' : (hasRequest ? '📍⏳' : '📍');
     const idText = hideIds ? '' : ' (ID: ' + friend.friend_id + ')';
     const spanStyle = hideIds ? 'flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' : 'flex: 1;';
-    devLog('[updateFriendsWindow] Friend', friend.name, '- hasRequest:', hasRequest, 'isActive:', isActive);
-    return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span style="' + spanStyle + '">' + friend.name + idText + betaIndicator + ' (' + timeStr + ')</span><button onclick="toggleLocationRequest(' + friend.friend_id + ')" style="' + buttonStyle + ' border: none; border-radius: 3px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer; flex-shrink: 0; margin-left: 5px;">' + buttonText + '</button></div>';
+    devLog('[updateFriendsWindow] Friend', friend.name, '- hasRequest:', hasRequest, 'isActive:', isActive, 'show_tracker:', friend.show_tracker);
+    
+    // Only show tracker button if friend has show_tracker = true (WebSocket connected)
+    const trackerButton = friend.show_tracker ? 
+      '<button onclick="toggleLocationRequest(' + friend.friend_id + ')" style="' + buttonStyle + ' border: none; border-radius: 3px; padding: 2px 6px; font-size: 0.7rem; cursor: pointer; flex-shrink: 0; margin-left: 5px;">' + buttonText + '</button>' : 
+      '';
+    
+    return '<div style="display: flex; justify-content: space-between; align-items: center; line-height: 1; padding: 1px 0;"><span style="' + spanStyle + '">' + friend.name + idText + betaIndicator + ' (' + timeStr + ')</span>' + trackerButton + '</div>';
   }).join('');
   
   friendsWindow.innerHTML = header + friendsList;
