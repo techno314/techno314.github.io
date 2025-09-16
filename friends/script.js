@@ -226,7 +226,7 @@ function initializeWebSocket() {
   
   socket.on('admin_notification', (data) => {
     devLog('[WebSocket] Admin notification:', data);
-    showNotification('Admin: ' + data.message, 'info');
+    showAdminNotification('Admin: ' + data.message, 'info');
   });
   
   socket.on('force_reload', (data) => {
@@ -337,6 +337,29 @@ function showNotification(message, type = 'info', noSound = false) {
     notification.classList.remove('show');
     setTimeout(() => document.body.removeChild(notification), 300);
   }, 5000);
+}
+
+function showAdminNotification(message, type = 'info', noSound = false) {
+  devLog('[showAdminNotification] Message:', message, 'Type:', type);
+  const notification = document.createElement('div');
+  notification.className = `notification ${type}`;
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  
+  // Play notification sound if enabled and not suppressed
+  if (soundEnabled && !noSound) {
+    devLog('[showAdminNotification] Playing sound');
+    const audio = new Audio('notification.mp3');
+    audio.volume = 0.1;
+    audio.play().catch(() => {});
+  }
+  
+  setTimeout(() => notification.classList.add('show'), 100);
+  
+  setTimeout(() => {
+    notification.classList.remove('show');
+    setTimeout(() => document.body.removeChild(notification), 300);
+  }, 10000);
 }
 
 function toggleSound() {
